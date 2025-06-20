@@ -5,6 +5,30 @@ import { generateObject, embedMany } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
 
+// Cloudflare Vectorize types
+interface VectorizeVector {
+  id: string;
+  values: number[];
+  metadata?: Record<string, any>;
+}
+
+interface VectorizeBinding {
+  insert(vectors: VectorizeVector[]): Promise<{ mutationId: string }>;
+  query(vector: number[], options?: {
+    topK?: number;
+    returnValues?: boolean;
+    returnMetadata?: 'none' | 'indexed' | 'all';
+    filter?: Record<string, any>;
+  }): Promise<{
+    matches: Array<{
+      id: string;
+      score: number;
+      values?: number[];
+      metadata?: Record<string, any>;
+    }>;
+  }>;
+}
+
 /**
  * Clean messy transaction text by removing timestamps and normalizing spaces
  */
@@ -22,14 +46,27 @@ export const transactionAnalyzerTool = createTool({
     transactionText: z.string()
       .min(5, 'Transaction text must contain meaningful content')
       .describe('Single Hebrew transaction text from bank statement including merchant name, amount, date, and transaction details for comprehensive analysis'),
+    storeInVector: z.boolean().default(true).describe('Whether to store the embeddings in Vectorize database'),
+    vectorDB: z.any().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
   }),
-  outputSchema: TransactionAnalysisSchema,
+  outputSchema: TransactionAnalysisSchema.extend({
+    vectorId: z.string().optional().describe('ID of the stored vector in Vectorize database'),
+    mutationId: z.string().optional().describe('Vectorize mutation ID for the storage operation'),
+  }),
   execute: async ({ context }) => {
-    return await analyzeTransaction(context.transactionText);
+    return await analyzeTransaction(
+      context.transactionText, 
+      context.storeInVector, 
+      context.vectorDB
+    );
   },
 });
 
-const analyzeTransaction = async (transactionText: string): Promise<TransactionAnalysis> => {
+const analyzeTransaction = async (
+  transactionText: string, 
+  storeInVector: boolean = true, 
+  vectorDB?: VectorizeBinding
+): Promise<TransactionAnalysis & { vectorId?: string; mutationId?: string }> => {
   try {
     // Clean the input text first
     const cleanedText = cleanTransactionText(transactionText);
@@ -121,11 +158,55 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     console.log('First 5 values of Hebrew embedding:', embeddingResults.embeddings[0].slice(0, 5));
 
     // Combine analysis with embeddings
-    const finalResult: TransactionAnalysis = {
+    const finalResult: TransactionAnalysis & { vectorId?: string; mutationId?: string } = {
       ...analysisResult.object,
       summaryEmbedding: embeddingResults.embeddings[0],
       englishSummaryEmbedding: embeddingResults.embeddings[1]
     };
+
+    // Store in Vectorize database if requested and binding is available
+    if (storeInVector && vectorDB) {
+      try {
+        console.log('Storing embeddings in Vectorize database...');
+        
+        // Extract amount from the transaction text for metadata
+        const amountMatch = cleanedText.match(/[\d,]+\.?\d*/);
+        const amount = amountMatch ? parseFloat(amountMatch[0].replace(',', '')) : 0;
+        
+        // Generate unique ID for this transaction
+        const vectorId = `transaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Prepare vectors for storage (we'll store the Hebrew summary embedding as primary)
+        const vectors: VectorizeVector[] = [
+          {
+            id: vectorId,
+            values: embeddingResults.embeddings[0], // Hebrew embedding
+            metadata: {
+              hebrewSummary: analysisResult.object.summary,
+              englishSummary: analysisResult.object.englishSummary,
+              transactionType: analysisResult.object.transactionType,
+              category: analysisResult.object.category,
+              amount: amount,
+              originalText: cleanedText,
+              createdAt: new Date().toISOString(),
+              embeddingModel: 'text-embedding-3-small'
+            }
+          }
+        ];
+        
+        const insertResult = await vectorDB.insert(vectors);
+        console.log('Successfully stored in Vectorize:', insertResult.mutationId);
+        
+        finalResult.vectorId = vectorId;
+        finalResult.mutationId = insertResult.mutationId;
+        
+      } catch (vectorError) {
+        console.error('Failed to store in Vectorize database:', vectorError);
+        // Don't fail the entire operation if vector storage fails
+      }
+    } else if (storeInVector && !vectorDB) {
+      console.log('🔧 Local development mode: Vectorize binding not available, skipping vector storage');
+    }
 
     console.log('Final result with embeddings ready');
     return finalResult;

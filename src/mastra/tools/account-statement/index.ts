@@ -1,6 +1,7 @@
 // Account statement analysis tools
 export { creditCardDataExtractorTool } from './credit-card-extractor';
 export { transactionAnalyzerTool } from './transaction-analyzer';
+export { vectorSearchTool } from './vector-search';
 
 // Schema and types
 export * from './types';
