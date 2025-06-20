@@ -65,12 +65,25 @@ export const TransactionAnalysisSchema = z.object({
     .max(200, 'Summary should be concise, maximum 200 characters')
     .describe('Clean Hebrew transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "תשלום חודשי עירית נתניה 942.55 ₪"'),
     
+  englishSummary: z.string()
+    .min(70, 'English summary must be at least 70 characters for meaningful and detailed content')
+    .max(200, 'English summary should be concise, maximum 200 characters')
+    .describe('Clean English transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "Monthly payment to Netanya Municipality 942.55 NIS"'),
+    
+  summaryEmbedding: z.array(z.number())
+    .length(1536, 'OpenAI text-embedding-ada-002 produces 1536-dimensional vectors')
+    .describe('Vector embedding of the Hebrew summary for semantic search and similarity matching in financial applications'),
+    
+  englishSummaryEmbedding: z.array(z.number())
+    .length(1536, 'OpenAI text-embedding-ada-002 produces 1536-dimensional vectors')
+    .describe('Vector embedding of the English summary for semantic search and similarity matching in financial applications'),
+    
   transactionType: TransactionTypeSchema
     .describe('Classification of transaction frequency: regular (one-time purchase), monthly (recurring subscription/insurance), or credit (incoming money/salary)'),
     
   category: TransactionCategorySchema
     .describe('Transaction category based on Israeli merchant patterns and transaction nature for personal finance tracking and budgeting')
-}).describe('Complete analysis of a Hebrew banking transaction including intelligent categorization and embedding-ready summary for financial management');
+}).describe('Complete analysis of a Hebrew banking transaction including intelligent categorization, embedding-ready summaries in both Hebrew and English, and their corresponding vector embeddings for financial management and semantic search');
 
 // Inferred TypeScript types from Zod schemas
 export type CreditCardData = z.infer<typeof CreditCardDataSchema>;

@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
-import { generateObject } from 'ai';
+import { generateObject, embed } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
 
@@ -27,35 +27,81 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     const schemaPrompt = generatePromptFromSchema(TransactionAnalysisSchema);
     console.log('Generated schema prompt:', schemaPrompt);
     
-    const result = await generateObject({
+    // First, generate the transaction analysis without embeddings
+    const analysisResult = await generateObject({
       model: openai(process.env.MODEL ?? "gpt-4o"),
       prompt: `
         You are an expert Hebrew banking transaction analyzer for Israeli financial data.
         
         Analyze this Hebrew transaction text: "${transactionText}"
         
-        Extract and return data according to this schema:
+        Extract and return data according to this schema (ignore embedding fields for now):
         
         ${schemaPrompt}
         
-        CRITICAL: The summary MUST be at least 70 characters long. Here's how to achieve this:
+        CRITICAL: Both summaries MUST be at least 70 characters long. Here's how to achieve this:
         
-        For a fashion store transaction like "אופנת טוונט פור סבן 339.80 ₪", create a summary like:
+        For a fashion store transaction like "אופנת טוונט פור סבן 339.80 ₪":
+        
+        Hebrew summary example:
         "רכישה בחנות אופנת טוונט פור סבן בסך 339.80 שקלים, קנייה רגילה של בגדים ואופנה"
         
-        Formula for 70+ character summary:
-        - Start with transaction type: "רכישה ב..." or "תשלום ל..." or "עסקה ב..."
-        - Add merchant name: "חנות X" or "בנק X" or "חברת X"  
-        - Add amount: "בסך X שקלים"
-        - Add context: "קנייה רגילה של..." or "שירות של..." or "תשלום עבור..."
+        English summary example:
+        "Purchase at Twenty Four Seven fashion store for 339.80 NIS, regular clothing and fashion shopping"
         
-        Count characters carefully - the summary must be 70-200 characters!
+        Formula for 70+ character summaries:
+        Hebrew:
+        - Start: "רכישה ב..." / "תשלום ל..." / "עסקה ב..."
+        - Merchant: "חנות X" / "בנק X" / "חברת X"  
+        - Amount: "בסך X שקלים"
+        - Context: "קנייה רגילה של..." / "שירות של..." / "תשלום עבור..."
+        
+        English:
+        - Start: "Purchase at..." / "Payment to..." / "Transaction at..."
+        - Merchant: "X store" / "X bank" / "X company"
+        - Amount: "for X NIS" / "of X shekels"
+        - Context: "regular purchase of..." / "service for..." / "payment for..."
+        
+        Count characters carefully - both summaries must be 70-200 characters!
+        
+        Return only: summary, englishSummary, transactionType, category (no embeddings)
       `,
-      schema: TransactionAnalysisSchema,
+      schema: z.object({
+        summary: z.string().min(70).max(200),
+        englishSummary: z.string().min(70).max(200),
+        transactionType: TransactionAnalysisSchema.shape.transactionType,
+        category: TransactionAnalysisSchema.shape.category
+      }),
     });
 
-    console.log('AI generated result:', result.object);
-    return result.object;
+    console.log('AI generated analysis:', analysisResult.object);
+
+    // Generate embeddings for both summaries
+    console.log('Generating embeddings...');
+    
+    const [hebrewEmbeddingResult, englishEmbeddingResult] = await Promise.all([
+      embed({
+        model: openai.embedding('text-embedding-ada-002'),
+        value: analysisResult.object.summary,
+      }),
+      embed({
+        model: openai.embedding('text-embedding-ada-002'),
+        value: analysisResult.object.englishSummary,
+      })
+    ]);
+
+    console.log('Embeddings generated successfully');
+
+    // Combine analysis with embeddings
+    const finalResult: TransactionAnalysis = {
+      ...analysisResult.object,
+      summaryEmbedding: hebrewEmbeddingResult.embedding,
+      englishSummaryEmbedding: englishEmbeddingResult.embedding
+    };
+
+    console.log('Final result with embeddings ready');
+    return finalResult;
+
   } catch (error) {
     console.error('=== TRANSACTION ANALYSIS ERROR ===');
     console.error('Error type:', error?.constructor?.name);
@@ -65,9 +111,14 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     console.error('Model used:', process.env.MODEL ?? "gpt-4o");
     console.error('================================');
     
-    // Fallback response that matches the schema
+    // Fallback response that matches the schema (with dummy embeddings)
+    const dummyEmbedding = new Array(1536).fill(0);
+    
     return {
       summary: `עסקה בסך ${transactionText.includes('₪') ? transactionText.match(/₪\s*[\d,]+\.?\d*/)?.[0] || '' : ''} - ${transactionText.substring(0, 50)}`,
+      englishSummary: `Transaction for ${transactionText.includes('₪') ? transactionText.match(/₪\s*[\d,]+\.?\d*/)?.[0] || '' : ''} - ${transactionText.substring(0, 50)}`,
+      summaryEmbedding: dummyEmbedding,
+      englishSummaryEmbedding: dummyEmbedding,
       transactionType: 'regular' as const,
       category: 'other' as const
     };
