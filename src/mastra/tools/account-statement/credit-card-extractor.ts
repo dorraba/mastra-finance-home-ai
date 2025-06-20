@@ -1,59 +1,57 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+import { generateObject } from 'ai';
+import { CreditCardData, CreditCardDataSchema } from './types';
 
 export const creditCardDataExtractorTool = createTool({
   id: 'extract-credit-card-data',
-  description: 'Extract general data from credit card or bank account statement CSV text in Hebrew',
+  description: 'Extract and validate general data from Hebrew credit card or bank account statements including card digits, account numbers, dates, and amounts',
   inputSchema: z.object({
-    csvText: z.string().describe('CSV text content of the statement in Hebrew'),
+    csvText: z.string()
+      .min(10, 'CSV text must contain meaningful content')
+      .describe('Hebrew CSV text content of the bank statement containing transaction details, account information, and amounts'),
   }),
-  outputSchema: z.object({
-    lastFourDigits: z.string().describe('Last 4 digits of credit card'),
-    bankAccountNumber: z.string().describe('Bank account number'),
-    statementDate: z.string().describe('Statement date in Hebrew format'),
-    totalAmount: z.number().describe('Total amount in NIS'),
-  }),
+  outputSchema: CreditCardDataSchema,
   execute: async ({ context }) => {
     return await extractCreditCardData(context.csvText);
   },
 });
 
-const extractCreditCardData = async (csvText: string) => {
-  // Hebrew date patterns and common Hebrew banking terms
-  const hebrewMonths = {
-    'ינואר': '01', 'פברואר': '02', 'מרץ': '03', 'אפריל': '04',
-    'מאי': '05', 'יוני': '06', 'יולי': '07', 'אוגוסט': '08',
-    'ספטמבר': '09', 'אוקטובר': '10', 'נובמבר': '11', 'דצמבר': '12'
-  };
+const extractCreditCardData = async (csvText: string): Promise<CreditCardData> => {
+  const result = await generateObject({
+    model: openai(process.env.MODEL ?? "gpt-4o"),
+    prompt: `
+      You are a specialized Hebrew banking statement analyzer. Extract the following critical information from this Hebrew bank statement text with high accuracy:
 
-  // Extract last 4 digits of credit card (look for patterns like ****1234)
-  const ccPattern = /\*+(\d{4})/g;
-  const ccMatch = csvText.match(ccPattern);
-  const lastFourDigits = ccMatch ? ccMatch[0].slice(-4) : '';
+      Hebrew Banking Text to Analyze:
+      "${csvText}"
 
-  // Extract bank account number (look for account number patterns)
-  const accountPattern = /(?:חשבון|מספר חשבון|ח\.ב)[:\s]*(\d{6,})/gi;
-  const accountMatch = csvText.match(accountPattern);
-  const bankAccountNumber = accountMatch ? accountMatch[0].replace(/[^\d]/g, '') : '';
+      EXTRACTION REQUIREMENTS:
 
-  // Extract statement date (Hebrew format)
-  const datePattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g;
-  const dateMatch = csvText.match(datePattern);
-  const statementDate = dateMatch ? dateMatch[0] : '';
+      1. **Credit Card Last 4 Digits**: 
+         - Look for Hebrew patterns like "המסתיים ב-4357" (ending with 4357)
+         - Also check for "מסתיים ב-" or similar Hebrew phrases
+         - Return exactly 4 digits only
 
-  // Extract total amount (look for total/sum patterns with Hebrew currency)
-  const totalPattern = /(?:סך הכל|סה״כ|יתרה|סכום)[:\s]*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:₪|שח״י)?/gi;
-  const totalMatch = csvText.match(totalPattern);
-  let totalAmount = 0;
-  if (totalMatch) {
-    const amountStr = totalMatch[0].replace(/[^\d.,-]/g, '');
-    totalAmount = parseFloat(amountStr.replace(',', '')) || 0;
-  }
+      2. **Bank Account Number**: 
+         - Look for patterns like "לחשבון מזרחי-טפחות 577-181036"
+         - Extract the numeric part only (remove hyphens, spaces, bank names)
+         - Common Israeli banks: מזרחי-טפחות, בנק לאומי, בנק הפועלים, בנק דיסקונט
 
-  return {
-    lastFourDigits,
-    bankAccountNumber,
-    statementDate,
-    totalAmount,
-  };
+      3. **Statement Date**: 
+         - Find dates in Hebrew context, typically in DD/MM/YYYY format
+         - Look for context clues like "עסקאות לחיוב ב-" followed by date
+
+      4. **Total Amount**: 
+         - Look for monetary amounts with ₪ (shekel) symbol
+         - Parse amounts with comma separators (e.g., "11,282.47")
+         - Extract numeric value only, convert to proper decimal format
+
+      CRITICAL: Return data in exact schema format with proper validation.
+    `,
+    schema: CreditCardDataSchema,
+  });
+
+  return result.object;
 }; 

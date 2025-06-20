@@ -1,17 +1,18 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+import { generateObject } from 'ai';
+import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 
 export const transactionAnalyzerTool = createTool({
   id: 'analyze-transaction',
-  description: 'Analyze a single transaction from Hebrew bank statement and extract summary, type, and category',
+  description: 'Analyze Hebrew banking transactions to extract embedding-optimized summaries, classify transaction types, and categorize based on Israeli merchant patterns for comprehensive financial tracking',
   inputSchema: z.object({
-    transactionText: z.string().describe('Single transaction text in Hebrew'),
+    transactionText: z.string()
+      .min(5, 'Transaction text must contain meaningful content')
+      .describe('Single Hebrew transaction text from bank statement including merchant name, amount, date, and transaction details for comprehensive analysis'),
   }),
-  outputSchema: z.object({
-    summary: z.string().describe('Transaction summary optimized for embeddings'),
-    transactionType: z.enum(['regular', 'monthly', 'credit']).describe('Type of transaction'),
-    category: z.string().describe('Transaction category from predefined list'),
-  }),
+  outputSchema: TransactionAnalysisSchema,
   execute: async ({ context }) => {
     return await analyzeTransaction(context.transactionText);
   },
@@ -39,58 +40,57 @@ export const TRANSACTION_CATEGORIES = [
   'אחר' // Other
 ] as const;
 
-/**
- * Keywords that indicate monthly recurring transactions
- */
-const MONTHLY_KEYWORDS = ['קביעות', 'חודשי', 'מנוי', 'ביטוח', 'משכנתא', 'הלוואה'];
+const analyzeTransaction = async (transactionText: string): Promise<TransactionAnalysis> => {
+  const result = await generateObject({
+    model: openai(process.env.MODEL ?? "gpt-4o"),
+    prompt: `
+      You are an expert Hebrew banking transaction analyzer specializing in Israeli financial data processing and categorization. Analyze this Hebrew transaction text with precision:
 
-/**
- * Keywords that indicate credit/income transactions
- */
-const CREDIT_KEYWORDS = ['זיכוי', 'החזר', 'משכורת', 'קצבה', 'הפקדה'];
+      Hebrew Transaction Text:
+      "${transactionText}"
 
-/**
- * Merchant patterns for transaction categorization
- */
-const MERCHANT_PATTERNS = {
-  'מזון ושתייה': /רמי לוי|שופרסל|ויקטורי|מגה|יוחננוף|מחסני השוק|שוק|מזון|מסעדה|קפה|בר/i,
-  'דלק': /דלק|גז|תחנת דלק|סונול|פז|דור אלון/i,
-  'תחבורה': /מונית|אוטובוס|רכבת|חניה|גט|מובי/i,
-  'רפואה ובריאות': /רופא|רפואה|מכבי|כללית|לאומית|מאוחדת|בית מרקחת|קופת חולים/i,
-  'קניות ובילוי': /H&M|זארה|אייס|פוקס|קסטרו|גולף|ביג|דייסו|איקאה/i,
-  'טכנולוגיה': /אפל|גוגל|מיקרוסופט|אמזון|נטפליקס|ספוטיפיי|KSP|יודיעין/i,
-  'בנקאות ופיננסים': /בנק|עמלה|ריבית|הלוואה|ביטוח|משכנתא/i,
-};
+      COMPREHENSIVE ANALYSIS REQUIREMENTS:
 
-const analyzeTransaction = async (transactionText: string) => {
-  // Determine transaction type
-  let transactionType: 'regular' | 'monthly' | 'credit' = 'regular';
-  
-  if (MONTHLY_KEYWORDS.some(keyword => transactionText.includes(keyword))) {
-    transactionType = 'monthly';
-  } else if (CREDIT_KEYWORDS.some(keyword => transactionText.includes(keyword)) || 
-             transactionText.includes('+') || 
-             parseFloat(transactionText.replace(/[^\d.-]/g, '')) > 0) {
-    transactionType = 'credit';
-  }
+      1. **SUMMARY CREATION** (Hebrew, embedding-optimized for search and financial tracking):
+         - Create a concise Hebrew summary (70-200 characters)
+         - Include: merchant name, transaction amount, purchase type
+         - Optimize for vector embedding and semantic search capabilities
+         - Example: "רכישה ברמי לוי סופרמרקט 450 ₪ מוצרי מזון"
 
-  // Categorize transaction based on merchant name and transaction description
-  let category: string = 'אחר';
-  
-  for (const [categoryName, pattern] of Object.entries(MERCHANT_PATTERNS)) {
-    if (pattern.test(transactionText)) {
-      category = categoryName;
-      break;
-    }
-  }
+      2. **TRANSACTION TYPE CLASSIFICATION** (Payment pattern analysis):
+         Choose exactly one of these values based on transaction frequency and nature:
+         - "regular": Standard one-time transactions, purchases, single payments, ad-hoc expenses
+         - "monthly": Recurring payments (look for: קביעות, מנוי, ביטוח, משכנתא, הלוואה, subscriptions)
+         - "credit": Income/deposits (look for: זיכוי, החזר, משכורת, קצבה, positive amounts, refunds)
 
-  // Create embedding-optimized summary
-  const cleanText = transactionText.replace(/[^\u0590-\u05FF\s\d.,₪-]/g, '').trim();
-  const summary = `עסקה: ${cleanText} סוג: ${transactionType} קטגוריה: ${category}`;
+      3. **CATEGORY CLASSIFICATION** (Israeli Banking Context with Merchant Recognition):
+         Choose exactly one of these English values based on merchant type and transaction nature:
 
-  return {
-    summary,
-    transactionType,
-    category,
-  };
+         - "food_beverage": General food and beverage purchases including cafes, bars, and food courts
+         - "transportation": Public transport, taxis, trains, parking fees, and mobility services  
+         - "shopping_entertainment": General shopping, entertainment venues, movies, and recreational purchases
+         - "fuel": Gas stations and fuel purchases (Sonol, Paz, Dor Alon, Delek)
+         - "healthcare": Medical expenses, pharmacies, health funds (Clalit, Maccabi, Leumit, Meuhedet)
+         - "education": Schools, courses, educational materials, and learning-related expenses
+         - "insurance": Insurance premium payments for health, car, home, or life insurance
+         - "mandatory_payments": Taxes, utilities, government fees, and other required payments
+         - "restaurants": Dining out, food delivery services, and restaurant meals
+         - "grocery": Supermarket purchases (Rami Levy, Shufersal, Victory, Mega, Yochananof)
+         - "clothing_shoes": Fashion, clothing, footwear purchases, and apparel shopping
+         - "technology": Electronics, software, apps, tech services (Apple, Google, Netflix)
+         - "home_design": Furniture, home improvement, interior design, and household items (IKEA)
+         - "sports_recreation": Sports equipment, gym memberships, recreational activities, and fitness
+         - "banking_finance": Bank fees, loan payments, financial services, and banking charges
+         - "other": Miscellaneous transactions that do not fit into other predefined categories
+
+      CRITICAL INSTRUCTIONS: 
+      - Return exactly the specified enum values from the schema
+      - Analyze Hebrew content but respond with English enum values
+      - Consider Israeli merchant patterns and Hebrew banking terminology
+      - Prioritize accuracy in categorization for personal finance management
+    `,
+    schema: TransactionAnalysisSchema,
+  });
+
+  return result.object;
 }; 
