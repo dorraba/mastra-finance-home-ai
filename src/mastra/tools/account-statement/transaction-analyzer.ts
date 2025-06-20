@@ -1,27 +1,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createOpenAI } from '@ai-sdk/openai';
-import { generateObject, embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { generateObject, embedMany } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
-
-// Debug environment variables
-console.log('=== ENVIRONMENT DEBUG ===');
-console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
-console.log('API Key length:', process.env.OPENAI_API_KEY?.length);
-console.log('API Key first 10 chars:', process.env.OPENAI_API_KEY?.substring(0, 10));
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('MODEL:', process.env.MODEL);
-console.log('========================');
-
-// Create OpenAI client with explicit configuration
-const openaiClient = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  compatibility: 'strict', // Use strict mode for OpenAI API
-});
-
-// Helper to create models
-const openai = (modelId: string) => openaiClient(modelId);
 
 /**
  * Clean messy transaction text by removing timestamps and normalizing spaces
@@ -113,19 +95,17 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     console.log('Hebrew summary:', analysisResult.object.summary);
     console.log('English summary:', analysisResult.object.englishSummary);
     
-    let hebrewEmbeddingResult, englishEmbeddingResult;
+    let embeddingResults;
     
     try {
-      [hebrewEmbeddingResult, englishEmbeddingResult] = await Promise.all([
-        embed({
-          model: openaiClient.embedding('text-embedding-3-small'),
-          value: analysisResult.object.summary,
-        }),
-        embed({
-          model: openaiClient.embedding('text-embedding-3-small'),
-          value: analysisResult.object.englishSummary,
-        })
-      ]);
+      // Use embedMany for better performance and cleaner code
+      embeddingResults = await embedMany({
+        model: openai.embedding('text-embedding-3-small'),
+        values: [
+          analysisResult.object.summary,
+          analysisResult.object.englishSummary
+        ]
+      });
     } catch (embeddingError) {
       console.error('=== EMBEDDING GENERATION ERROR ===');
       console.error('Embedding error type:', embeddingError?.constructor?.name);
@@ -136,15 +116,15 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     }
 
     console.log('Embeddings generated successfully');
-    console.log('Hebrew embedding length:', hebrewEmbeddingResult.embedding.length);
-    console.log('English embedding length:', englishEmbeddingResult.embedding.length);
-    console.log('First 5 values of Hebrew embedding:', hebrewEmbeddingResult.embedding.slice(0, 5));
+    console.log('Hebrew embedding length:', embeddingResults.embeddings[0].length);
+    console.log('English embedding length:', embeddingResults.embeddings[1].length);
+    console.log('First 5 values of Hebrew embedding:', embeddingResults.embeddings[0].slice(0, 5));
 
     // Combine analysis with embeddings
     const finalResult: TransactionAnalysis = {
       ...analysisResult.object,
-      summaryEmbedding: hebrewEmbeddingResult.embedding,
-      englishSummaryEmbedding: englishEmbeddingResult.embedding
+      summaryEmbedding: embeddingResults.embeddings[0],
+      englishSummaryEmbedding: embeddingResults.embeddings[1]
     };
 
     console.log('Final result with embeddings ready');
