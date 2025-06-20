@@ -61,21 +61,21 @@ export const CreditCardDataSchema = z.object({
  */
 export const TransactionAnalysisSchema = z.object({
   summary: z.string()
-    .min(70, 'Summary must be at least 70 characters for meaningful and detailed content')
+    .min(20, 'Summary must be at least 50 characters for meaningful content')
     .max(200, 'Summary should be concise, maximum 200 characters')
-    .describe('Clean Hebrew transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "תשלום חודשי עירית נתניה 942.55 ₪"'),
+    .describe('Clean Hebrew transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "תשלום חודשי עירית נתניה בסך 942.55 שקלים עבור מסים ותשלומי חובה"'),
     
   englishSummary: z.string()
-    .min(70, 'English summary must be at least 70 characters for meaningful and detailed content')
+    .min(20, 'English summary must be at least 50 characters for meaningful content')
     .max(200, 'English summary should be concise, maximum 200 characters')
-    .describe('Clean English transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "Monthly payment to Netanya Municipality 942.55 NIS"'),
+    .describe('Clean English transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "Monthly payment to Netanya Municipality for 942.55 NIS for taxes and mandatory payments"'),
     
   summaryEmbedding: z.array(z.number())
-    .length(1536, 'OpenAI text-embedding-ada-002 produces 1536-dimensional vectors')
+    .length(1536, 'OpenAI text-embedding-3-small produces 1536-dimensional vectors')
     .describe('Vector embedding of the Hebrew summary for semantic search and similarity matching in financial applications'),
     
   englishSummaryEmbedding: z.array(z.number())
-    .length(1536, 'OpenAI text-embedding-ada-002 produces 1536-dimensional vectors')
+    .length(1536, 'OpenAI text-embedding-3-small produces 1536-dimensional vectors')
     .describe('Vector embedding of the English summary for semantic search and similarity matching in financial applications'),
     
   transactionType: TransactionTypeSchema

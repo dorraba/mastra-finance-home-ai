@@ -1,9 +1,27 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { generateObject, embed } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
+
+// Debug environment variables
+console.log('=== ENVIRONMENT DEBUG ===');
+console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+console.log('API Key length:', process.env.OPENAI_API_KEY?.length);
+console.log('API Key first 10 chars:', process.env.OPENAI_API_KEY?.substring(0, 10));
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('MODEL:', process.env.MODEL);
+console.log('========================');
+
+// Create OpenAI client with explicit configuration
+const openaiClient = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  compatibility: 'strict', // Use strict mode for OpenAI API
+});
+
+// Helper to create models
+const openai = (modelId: string) => openaiClient(modelId);
 
 /**
  * Clean messy transaction text by removing timestamps and normalizing spaces
@@ -58,31 +76,31 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
         
         ${schemaPrompt}
         
-        CRITICAL: Both summaries MUST be at least 70 characters long.
+        CRITICAL: Both summaries MUST be at least 50 characters long and descriptive.
         
         Examples of how to clean messy input:
         
         Input: "Tue Aug 27 2024 00:00:00 GMT+0300 אורבניקה 35 רגילה אופנה"
         Extract: Merchant="אורבניקה", Amount="35", Type="clothing store"
-        Hebrew: "רכישה בחנות אורבניקה בסך 35 שקלים, קנייה רגילה של בגדים ואופנה בחנות אורבניקה"
-        English: "Purchase at Urbanica store for 35 NIS, regular clothing and fashion shopping at Urbanica"
+        Hebrew: "רכישה בחנות אורבניקה בסך 35 שקלים לקניית בגדים ואופנה"
+        English: "Purchase at Urbanica store for 35 NIS for clothing and fashion items"
         
         Input: "עירית נתניה הוראת קבע 942.55"
         Extract: Merchant="עירית נתניה", Amount="942.55", Type="municipality payment"
-        Hebrew: "תשלום חודשי לעירית נתניה בסך 942.55 שקלים, הוראת קבע עבור מסים ותשלומי חובה"
-        English: "Monthly payment to Netanya Municipality for 942.55 NIS, standing order for taxes and mandatory payments"
+        Hebrew: "תשלום חודשי לעירית נתניה בסך 942.55 שקלים עבור מסים ותשלומי חובה"
+        English: "Monthly payment to Netanya Municipality for 942.55 NIS for taxes and mandatory payments"
         
-        Formula for 70+ character summaries:
-        Hebrew: "רכישה ב[merchant] בסך [amount] שקלים, [context] עבור [category type]"
-        English: "Purchase at [merchant] for [amount] NIS, [context] for [category type]"
+        Formula for descriptive summaries:
+        Hebrew: "תשלום/רכישה ב[merchant] בסך [amount] שקלים עבור [category description]"
+        English: "Payment/Purchase at [merchant] for [amount] NIS for [category description]"
         
         IGNORE: timestamps, existing categories, English dates, GMT references
         FOCUS: merchant name, amount, transaction nature
         CREATE: proper Hebrew and English summaries (70-200 chars each)
       `,
       schema: z.object({
-        summary: z.string().min(70).max(200),
-        englishSummary: z.string().min(70).max(200),
+        summary: z.string().min(50).max(200),
+        englishSummary: z.string().min(50).max(200),
         transactionType: TransactionAnalysisSchema.shape.transactionType,
         category: TransactionAnalysisSchema.shape.category
       }),
@@ -92,19 +110,35 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
 
     // Generate embeddings for both summaries
     console.log('Generating embeddings...');
+    console.log('Hebrew summary:', analysisResult.object.summary);
+    console.log('English summary:', analysisResult.object.englishSummary);
     
-    const [hebrewEmbeddingResult, englishEmbeddingResult] = await Promise.all([
-      embed({
-        model: openai.embedding('text-embedding-ada-002'),
-        value: analysisResult.object.summary,
-      }),
-      embed({
-        model: openai.embedding('text-embedding-ada-002'),
-        value: analysisResult.object.englishSummary,
-      })
-    ]);
+    let hebrewEmbeddingResult, englishEmbeddingResult;
+    
+    try {
+      [hebrewEmbeddingResult, englishEmbeddingResult] = await Promise.all([
+        embed({
+          model: openaiClient.embedding('text-embedding-3-small'),
+          value: analysisResult.object.summary,
+        }),
+        embed({
+          model: openaiClient.embedding('text-embedding-3-small'),
+          value: analysisResult.object.englishSummary,
+        })
+      ]);
+    } catch (embeddingError) {
+      console.error('=== EMBEDDING GENERATION ERROR ===');
+      console.error('Embedding error type:', embeddingError?.constructor?.name);
+      console.error('Embedding error message:', embeddingError instanceof Error ? embeddingError.message : String(embeddingError));
+      console.error('Full embedding error:', embeddingError);
+      console.error('================================');
+      throw embeddingError; // Re-throw to let outer catch handle it
+    }
 
     console.log('Embeddings generated successfully');
+    console.log('Hebrew embedding length:', hebrewEmbeddingResult.embedding.length);
+    console.log('English embedding length:', englishEmbeddingResult.embedding.length);
+    console.log('First 5 values of Hebrew embedding:', hebrewEmbeddingResult.embedding.slice(0, 5));
 
     // Combine analysis with embeddings
     const finalResult: TransactionAnalysis = {
