@@ -5,6 +5,16 @@ import { generateObject, embed } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
 
+/**
+ * Clean messy transaction text by removing timestamps and normalizing spaces
+ */
+const cleanTransactionText = (rawText: string): string => {
+  return rawText
+    .replace(/^.*GMT\+\d{4}\s*\([^)]+\)\s*/, '') // Remove timestamps like "Tue Aug 27 2024 00:00:00 GMT+0300 (Israel Daylight Time)"
+    .replace(/\s+/g, ' ')                        // Replace multiple spaces/tabs with single space
+    .trim();                                     // Remove leading/trailing whitespace
+};
+
 export const transactionAnalyzerTool = createTool({
   id: 'analyze-transaction',
   description: 'Analyze Hebrew banking transactions to extract embedding-optimized summaries, classify transaction types, and categorize based on Israeli merchant patterns for comprehensive financial tracking',
@@ -21,7 +31,10 @@ export const transactionAnalyzerTool = createTool({
 
 const analyzeTransaction = async (transactionText: string): Promise<TransactionAnalysis> => {
   try {
-    console.log('Analyzing transaction:', transactionText);
+    // Clean the input text first
+    const cleanedText = cleanTransactionText(transactionText);
+    console.log('Original transaction:', transactionText);
+    console.log('Cleaned transaction:', cleanedText);
     
     // Generate prompt from schema
     const schemaPrompt = generatePromptFromSchema(TransactionAnalysisSchema);
@@ -33,38 +46,39 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
       prompt: `
         You are an expert Hebrew banking transaction analyzer for Israeli financial data.
         
-        Analyze this Hebrew transaction text: "${transactionText}"
+        Analyze this transaction text: "${cleanedText}"
+        
+        IMPORTANT: The input may contain messy data like timestamps, mixed languages, or pre-existing categories. 
+        IGNORE all timestamps, English dates, and existing categories. Focus ONLY on:
+        - Merchant name (in Hebrew)
+        - Transaction amount 
+        - Transaction nature
         
         Extract and return data according to this schema (ignore embedding fields for now):
         
         ${schemaPrompt}
         
-        CRITICAL: Both summaries MUST be at least 70 characters long. Here's how to achieve this:
+        CRITICAL: Both summaries MUST be at least 70 characters long.
         
-        For a fashion store transaction like "אופנת טוונט פור סבן 339.80 ₪":
+        Examples of how to clean messy input:
         
-        Hebrew summary example:
-        "רכישה בחנות אופנת טוונט פור סבן בסך 339.80 שקלים, קנייה רגילה של בגדים ואופנה"
+        Input: "Tue Aug 27 2024 00:00:00 GMT+0300 אורבניקה 35 רגילה אופנה"
+        Extract: Merchant="אורבניקה", Amount="35", Type="clothing store"
+        Hebrew: "רכישה בחנות אורבניקה בסך 35 שקלים, קנייה רגילה של בגדים ואופנה בחנות אורבניקה"
+        English: "Purchase at Urbanica store for 35 NIS, regular clothing and fashion shopping at Urbanica"
         
-        English summary example:
-        "Purchase at Twenty Four Seven fashion store for 339.80 NIS, regular clothing and fashion shopping"
+        Input: "עירית נתניה הוראת קבע 942.55"
+        Extract: Merchant="עירית נתניה", Amount="942.55", Type="municipality payment"
+        Hebrew: "תשלום חודשי לעירית נתניה בסך 942.55 שקלים, הוראת קבע עבור מסים ותשלומי חובה"
+        English: "Monthly payment to Netanya Municipality for 942.55 NIS, standing order for taxes and mandatory payments"
         
         Formula for 70+ character summaries:
-        Hebrew:
-        - Start: "רכישה ב..." / "תשלום ל..." / "עסקה ב..."
-        - Merchant: "חנות X" / "בנק X" / "חברת X"  
-        - Amount: "בסך X שקלים"
-        - Context: "קנייה רגילה של..." / "שירות של..." / "תשלום עבור..."
+        Hebrew: "רכישה ב[merchant] בסך [amount] שקלים, [context] עבור [category type]"
+        English: "Purchase at [merchant] for [amount] NIS, [context] for [category type]"
         
-        English:
-        - Start: "Purchase at..." / "Payment to..." / "Transaction at..."
-        - Merchant: "X store" / "X bank" / "X company"
-        - Amount: "for X NIS" / "of X shekels"
-        - Context: "regular purchase of..." / "service for..." / "payment for..."
-        
-        Count characters carefully - both summaries must be 70-200 characters!
-        
-        Return only: summary, englishSummary, transactionType, category (no embeddings)
+        IGNORE: timestamps, existing categories, English dates, GMT references
+        FOCUS: merchant name, amount, transaction nature
+        CREATE: proper Hebrew and English summaries (70-200 chars each)
       `,
       schema: z.object({
         summary: z.string().min(70).max(200),
