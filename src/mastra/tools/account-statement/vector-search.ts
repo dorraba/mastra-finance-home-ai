@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
-import { embed } from 'ai';
+import { embedMany } from 'ai';
 import { createVectorStorageProvider } from './providers/factory';
 import { VectorSearchOptions } from './providers/base';
 
@@ -73,18 +73,18 @@ const searchSimilarTransactions = async (
     console.log('Generating embedding for search query:', searchQuery);
     
     // Generate embedding for the search query
-    const embeddingResult = await embed({
+    const embeddingResult = await embedMany({
       model: openai.embedding('text-embedding-3-small'),
-      value: searchQuery,
+      values: [searchQuery],
     });
 
-    console.log('Search embedding generated, length:', embeddingResult.embedding.length);
+    console.log('Search embedding generated, length:', embeddingResult.embeddings[0].length);
 
     // Create the appropriate vector storage provider
     const vectorProvider = createVectorStorageProvider(vectorDB);
     
     // Search for similar vectors using the provider
-    const searchResults = await vectorProvider.search(embeddingResult.embedding, options);
+    const searchResults = await vectorProvider.search(embeddingResult.embeddings[0], options);
     
     console.log(`Found ${searchResults.length} results using ${vectorProvider.name}`);
 
@@ -105,7 +105,7 @@ const searchSimilarTransactions = async (
       query: searchQuery,
       results,
       totalResults: results.length,
-      searchEmbedding: embeddingResult.embedding,
+      searchEmbedding: embeddingResult.embeddings[0],
     };
 
   } catch (error) {
