@@ -63,7 +63,7 @@ export const TransactionAnalysisSchema = z.object({
   summary: z.string()
     .min(70, 'Summary must be at least 70 characters for meaningful and detailed content')
     .max(200, 'Summary should be concise, maximum 200 characters')
-    .describe('Hebrew transaction summary optimized for embedding and search, including merchant name, amount, and transaction nature. Example: "רכישה ברמי לוי סופרמרקט 450 ₪ מוצרי מזון"'),
+    .describe('Clean Hebrew transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "תשלום חודשי עירית נתניה 942.55 ₪"'),
     
   transactionType: TransactionTypeSchema
     .describe('Classification of transaction frequency: regular (one-time purchase), monthly (recurring subscription/insurance), or credit (incoming money/salary)'),

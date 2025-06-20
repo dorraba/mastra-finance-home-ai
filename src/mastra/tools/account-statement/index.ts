@@ -1,6 +1,12 @@
-// Tools
+// Account statement analysis tools
 export { creditCardDataExtractorTool } from './credit-card-extractor';
 export { transactionAnalyzerTool } from './transaction-analyzer';
+
+// Schema and types
+export * from './types';
+
+// Utilities
+export { generatePromptFromSchema, getFieldDescription } from './schema-prompt-generator';
 
 // Zod Schemas (primary source of truth)
 export { 
