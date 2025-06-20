@@ -2,42 +2,15 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { embed } from 'ai';
-
-// Cloudflare Vectorize types
-interface VectorizeBinding {
-  query(vector: number[], options?: {
-    topK?: number;
-    returnValues?: boolean;
-    returnMetadata?: 'none' | 'indexed' | 'all';
-    filter?: Record<string, any>;
-  }): Promise<{
-    matches: Array<{
-      id: string;
-      score: number;
-      values?: number[];
-      metadata?: Record<string, any>;
-    }>;
-  }>;
-}
-
-interface SimilarTransaction {
-  id: string;
-  score: number;
-  hebrewSummary: string;
-  englishSummary: string;
-  transactionType: string;
-  category: string;
-  amount: number;
-  originalText: string;
-  createdAt: string;
-}
+import { createVectorStorageProvider } from './providers/factory';
+import { VectorSearchOptions } from './providers/base';
 
 export const vectorSearchTool = createTool({
   id: 'vector-search-transactions',
-  description: 'Search for similar transactions using vector similarity search in Cloudflare Vectorize',
+  description: 'Search for similar transactions using vector similarity search',
   inputSchema: z.object({
     searchQuery: z.string().describe('Search query in Hebrew or English to find similar transactions'),
-    vectorDB: z.any().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
+    vectorDB: z.unknown().optional().describe('Vector database binding (optional for local development)'),
     topK: z.number().min(1).max(20).default(5).describe('Number of similar transactions to return'),
     minScore: z.number().min(0).max(1).default(0.7).describe('Minimum similarity score threshold'),
     filters: z.object({
@@ -67,27 +40,32 @@ export const vectorSearchTool = createTool({
     return await searchSimilarTransactions(
       context.searchQuery as string,
       context.vectorDB,
-      context.topK as number,
-      context.minScore as number,
-      context.filters
+      {
+        topK: context.topK as number,
+        minScore: context.minScore as number,
+        filters: context.filters
+      }
     );
   },
 });
 
 const searchSimilarTransactions = async (
   searchQuery: string,
-  vectorDB: VectorizeBinding,
-  topK: number = 5,
-  minScore: number = 0.7,
-  filters?: {
-    transactionType?: string;
-    category?: string;
-    minAmount?: number;
-    maxAmount?: number;
-  }
+  vectorDB: unknown,
+  options: VectorSearchOptions
 ): Promise<{
   query: string;
-  results: SimilarTransaction[];
+  results: Array<{
+    id: string;
+    score: number;
+    hebrewSummary: string;
+    englishSummary: string;
+    transactionType: string;
+    category: string;
+    amount: number;
+    originalText: string;
+    createdAt: string;
+  }>;
   totalResults: number;
   searchEmbedding: number[];
 }> => {
@@ -102,110 +80,31 @@ const searchSimilarTransactions = async (
 
     console.log('Search embedding generated, length:', embeddingResult.embedding.length);
 
-    // Check if vectorDB is available (only in Cloudflare Workers environment)
-    if (!vectorDB || typeof vectorDB.query !== 'function') {
-      console.log('🔧 Local development mode: Vectorize not available, returning mock results');
-      
-      // Return mock results for local development
-      const mockResults: SimilarTransaction[] = [
-        {
-          id: 'mock_transaction_1',
-          score: 0.92,
-          hebrewSummary: 'תשלום חודשי לעירית נתניה בסך 942.55 שקלים עבור תשלומי חובה',
-          englishSummary: 'Monthly payment to Netanya Municipality for 942.55 NIS for mandatory payments',
-          transactionType: 'monthly',
-          category: 'mandatory_payments',
-          amount: 942.55,
-          originalText: 'עירית נתניה הוראת קבע 942.55',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'mock_transaction_2',
-          score: 0.85,
-          hebrewSummary: 'רכישה ברמי לוי השקמה בסך 156.80 שקלים עבור קניות מזון',
-          englishSummary: 'Purchase at Rami Levy Hashikma for 156.80 NIS for food shopping',
-          transactionType: 'regular',
-          category: 'food_beverage',
-          amount: 156.80,
-          originalText: 'רמי לוי שיווק השקמה 156.80',
-          createdAt: new Date().toISOString(),
-        }
-      ];
-
-      // Apply filters to mock results if provided
-      let filteredMockResults = mockResults;
-      if (filters) {
-        filteredMockResults = mockResults.filter(result => {
-          if (filters.transactionType && result.transactionType !== filters.transactionType) return false;
-          if (filters.category && result.category !== filters.category) return false;
-          if (filters.minAmount !== undefined && result.amount < filters.minAmount) return false;
-          if (filters.maxAmount !== undefined && result.amount > filters.maxAmount) return false;
-          return result.score >= minScore;
-        });
-      }
-
-      return {
-        query: searchQuery,
-        results: filteredMockResults.slice(0, topK),
-        totalResults: filteredMockResults.length,
-        searchEmbedding: embeddingResult.embedding,
-      };
-    }
-
-    // Prepare filter object for Vectorize
-    const vectorizeFilter: Record<string, any> = {};
+    // Create the appropriate vector storage provider
+    const vectorProvider = createVectorStorageProvider(vectorDB);
     
-    if (filters) {
-      if (filters.transactionType) {
-        vectorizeFilter.transactionType = { $eq: filters.transactionType };
-      }
-      if (filters.category) {
-        vectorizeFilter.category = { $eq: filters.category };
-      }
-      if (filters.minAmount !== undefined || filters.maxAmount !== undefined) {
-        vectorizeFilter.amount = {};
-        if (filters.minAmount !== undefined) {
-          vectorizeFilter.amount.$gte = filters.minAmount;
-        }
-        if (filters.maxAmount !== undefined) {
-          vectorizeFilter.amount.$lte = filters.maxAmount;
-        }
-      }
-    }
+    // Search for similar vectors using the provider
+    const searchResults = await vectorProvider.search(embeddingResult.embedding, options);
+    
+    console.log(`Found ${searchResults.length} results using ${vectorProvider.name}`);
 
-    console.log('Searching Vectorize with filters:', vectorizeFilter);
-
-    // Search for similar vectors
-    const searchResult = await vectorDB.query(embeddingResult.embedding, {
-      topK: topK,
-      returnValues: false, // We don't need the vector values back
-      returnMetadata: 'all', // We want all metadata
-      filter: Object.keys(vectorizeFilter).length > 0 ? vectorizeFilter : undefined,
-    });
-
-    console.log(`Found ${searchResult.matches.length} potential matches`);
-
-    // Filter results by minimum score and transform to our format
-    const filteredResults: SimilarTransaction[] = searchResult.matches
-      .filter(match => match.score >= minScore)
-      .map(match => ({
-        id: match.id,
-        score: match.score,
-        hebrewSummary: match.metadata?.hebrewSummary || '',
-        englishSummary: match.metadata?.englishSummary || '',
-        transactionType: match.metadata?.transactionType || '',
-        category: match.metadata?.category || '',
-        amount: match.metadata?.amount || 0,
-        originalText: match.metadata?.originalText || '',
-        createdAt: match.metadata?.createdAt || '',
-      }));
-
-    console.log(`Returning ${filteredResults.length} results after filtering by score >= ${minScore}`);
+    // Transform results to match expected output format
+    const results = searchResults.map(result => ({
+      id: result.id,
+      score: result.score,
+      hebrewSummary: result.metadata.hebrewSummary,
+      englishSummary: result.metadata.englishSummary,
+      transactionType: result.metadata.transactionType,
+      category: result.metadata.category,
+      amount: result.metadata.amount,
+      originalText: result.metadata.originalText,
+      createdAt: result.metadata.createdAt,
+    }));
 
     return {
       query: searchQuery,
-      results: filteredResults,
-      totalResults: filteredResults.length,
+      results,
+      totalResults: results.length,
       searchEmbedding: embeddingResult.embedding,
     };
 

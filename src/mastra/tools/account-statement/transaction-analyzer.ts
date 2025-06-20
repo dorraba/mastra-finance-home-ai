@@ -4,30 +4,8 @@ import { openai } from '@ai-sdk/openai';
 import { generateObject, embedMany } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
-
-// Cloudflare Vectorize types
-interface VectorizeVector {
-  id: string;
-  values: number[];
-  metadata?: Record<string, any>;
-}
-
-interface VectorizeBinding {
-  insert(vectors: VectorizeVector[]): Promise<{ mutationId: string }>;
-  query(vector: number[], options?: {
-    topK?: number;
-    returnValues?: boolean;
-    returnMetadata?: 'none' | 'indexed' | 'all';
-    filter?: Record<string, any>;
-  }): Promise<{
-    matches: Array<{
-      id: string;
-      score: number;
-      values?: number[];
-      metadata?: Record<string, any>;
-    }>;
-  }>;
-}
+import { createVectorStorageProvider } from './providers/factory';
+import { VectorRecord } from './providers/base';
 
 /**
  * Clean messy transaction text by removing timestamps and normalizing spaces
@@ -47,7 +25,7 @@ export const transactionAnalyzerTool = createTool({
       .min(5, 'Transaction text must contain meaningful content')
       .describe('Single Hebrew transaction text from bank statement including merchant name, amount, date, and transaction details for comprehensive analysis'),
     storeInVector: z.boolean().default(true).describe('Whether to store the embeddings in Vectorize database'),
-    vectorDB: z.any().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
+    vectorDB: z.unknown().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
   }),
   outputSchema: TransactionAnalysisSchema.extend({
     vectorId: z.string().optional().describe('ID of the stored vector in Vectorize database'),
@@ -65,7 +43,7 @@ export const transactionAnalyzerTool = createTool({
 const analyzeTransaction = async (
   transactionText: string, 
   storeInVector: boolean = true, 
-  vectorDB?: VectorizeBinding
+  vectorDB?: any
 ): Promise<TransactionAnalysis & { vectorId?: string; mutationId?: string }> => {
   try {
     // Clean the input text first
@@ -164,10 +142,11 @@ const analyzeTransaction = async (
       englishSummaryEmbedding: embeddingResults.embeddings[1]
     };
 
-    // Store in Vectorize database if requested and binding is available
-    if (storeInVector && vectorDB) {
+    // Store in vector database if requested
+    if (storeInVector) {
       try {
-        console.log('Storing embeddings in Vectorize database...');
+        // Create the appropriate vector storage provider
+        const vectorProvider = createVectorStorageProvider(vectorDB);
         
         // Extract amount from the transaction text for metadata
         const amountMatch = cleanedText.match(/[\d,]+\.?\d*/);
@@ -177,7 +156,7 @@ const analyzeTransaction = async (
         const vectorId = `transaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         // Prepare vectors for storage (we'll store the Hebrew summary embedding as primary)
-        const vectors: VectorizeVector[] = [
+        const vectors: VectorRecord[] = [
           {
             id: vectorId,
             values: embeddingResults.embeddings[0], // Hebrew embedding
@@ -194,18 +173,16 @@ const analyzeTransaction = async (
           }
         ];
         
-        const insertResult = await vectorDB.insert(vectors);
-        console.log('Successfully stored in Vectorize:', insertResult.mutationId);
+        const insertResult = await vectorProvider.insert(vectors);
+        console.log(`Successfully stored with ${vectorProvider.name}:`, insertResult.mutationId);
         
         finalResult.vectorId = vectorId;
         finalResult.mutationId = insertResult.mutationId;
         
       } catch (vectorError) {
-        console.error('Failed to store in Vectorize database:', vectorError);
+        console.error('Failed to store in vector database:', vectorError);
         // Don't fail the entire operation if vector storage fails
       }
-    } else if (storeInVector && !vectorDB) {
-      console.log('🔧 Local development mode: Vectorize binding not available, skipping vector storage');
     }
 
     console.log('Final result with embeddings ready');
