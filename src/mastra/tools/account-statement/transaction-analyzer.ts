@@ -4,6 +4,8 @@ import { openai } from '@ai-sdk/openai';
 import { generateObject, embedMany } from 'ai';
 import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
+import { createVectorStorageProvider } from './providers/factory';
+import { VectorRecord } from './providers/base';
 
 /**
  * Clean messy transaction text by removing timestamps and normalizing spaces
@@ -22,14 +24,27 @@ export const transactionAnalyzerTool = createTool({
     transactionText: z.string()
       .min(5, 'Transaction text must contain meaningful content')
       .describe('Single Hebrew transaction text from bank statement including merchant name, amount, date, and transaction details for comprehensive analysis'),
+    storeInVector: z.boolean().default(true).describe('Whether to store the embeddings in Vectorize database'),
+    vectorDB: z.unknown().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
   }),
-  outputSchema: TransactionAnalysisSchema,
+  outputSchema: TransactionAnalysisSchema.extend({
+    vectorId: z.string().optional().describe('ID of the stored vector in Vectorize database'),
+    mutationId: z.string().optional().describe('Vectorize mutation ID for the storage operation'),
+  }),
   execute: async ({ context }) => {
-    return await analyzeTransaction(context.transactionText);
+    return await analyzeTransaction(
+      context.transactionText, 
+      context.storeInVector, 
+      context.vectorDB
+    );
   },
 });
 
-const analyzeTransaction = async (transactionText: string): Promise<TransactionAnalysis> => {
+const analyzeTransaction = async (
+  transactionText: string, 
+  storeInVector: boolean = true, 
+  vectorDB?: any
+): Promise<TransactionAnalysis & { vectorId?: string; mutationId?: string }> => {
   try {
     // Clean the input text first
     const cleanedText = cleanTransactionText(transactionText);
@@ -121,11 +136,54 @@ const analyzeTransaction = async (transactionText: string): Promise<TransactionA
     console.log('First 5 values of Hebrew embedding:', embeddingResults.embeddings[0].slice(0, 5));
 
     // Combine analysis with embeddings
-    const finalResult: TransactionAnalysis = {
+    const finalResult: TransactionAnalysis & { vectorId?: string; mutationId?: string } = {
       ...analysisResult.object,
       summaryEmbedding: embeddingResults.embeddings[0],
       englishSummaryEmbedding: embeddingResults.embeddings[1]
     };
+
+    // Store in vector database if requested
+    if (storeInVector) {
+      try {
+        // Create the appropriate vector storage provider
+        const vectorProvider = createVectorStorageProvider(vectorDB);
+        
+        // Extract amount from the transaction text for metadata
+        const amountMatch = cleanedText.match(/[\d,]+\.?\d*/);
+        const amount = amountMatch ? parseFloat(amountMatch[0].replace(',', '')) : 0;
+        
+        // Generate unique ID for this transaction
+        const vectorId = `transaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Prepare vectors for storage (we'll store the Hebrew summary embedding as primary)
+        const vectors: VectorRecord[] = [
+          {
+            id: vectorId,
+            values: embeddingResults.embeddings[0], // Hebrew embedding
+            metadata: {
+              hebrewSummary: analysisResult.object.summary,
+              englishSummary: analysisResult.object.englishSummary,
+              transactionType: analysisResult.object.transactionType,
+              category: analysisResult.object.category,
+              amount: amount,
+              originalText: cleanedText,
+              createdAt: new Date().toISOString(),
+              embeddingModel: 'text-embedding-3-small'
+            }
+          }
+        ];
+        
+        const insertResult = await vectorProvider.insert(vectors);
+        console.log(`Successfully stored with ${vectorProvider.name}:`, insertResult.mutationId);
+        
+        finalResult.vectorId = vectorId;
+        finalResult.mutationId = insertResult.mutationId;
+        
+      } catch (vectorError) {
+        console.error('Failed to store in vector database:', vectorError);
+        // Don't fail the entire operation if vector storage fails
+      }
+    }
 
     console.log('Final result with embeddings ready');
     return finalResult;
