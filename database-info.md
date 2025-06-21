@@ -1,137 +1,188 @@
-# SQLite Database Setup for Mastra Finance AI
+# 📊 Database Information - Cloudflare Vectorize
 
-## Database Location
-Your SQLite database is located at:
+This document provides detailed information about the vector database setup using Cloudflare Vectorize for the Mastra Finance AI project.
+
+## 🏗️ **Architecture Overview**
+
+The application uses **Cloudflare Vectorize**, a serverless vector database that provides:
+
+- **Global Distribution**: Vectors stored across Cloudflare's global network
+- **Serverless Scaling**: Automatically scales based on usage
+- **Low Latency**: Edge-optimized for fast query responses
+- **Cost Effective**: Pay only for what you use
+- **Zero Maintenance**: No infrastructure to manage
+
+## 📋 **Index Configuration**
+
+### **Primary Index: `finance-transactions`**
+
+- **Dimension**: 1536 (matches OpenAI text-embedding-3-small)
+- **Distance Metric**: Cosine similarity (default)
+- **Purpose**: Stores transaction analysis embeddings
+
+### **Vector Structure**
+
+Each vector record contains:
+
+```typescript
+interface VectorRecord {
+  id: string;                    // Unique transaction ID
+  values: number[];              // 1536-dimensional embedding
+  metadata: {
+    hebrewSummary: string;       // Hebrew transaction summary
+    englishSummary: string;      // English transaction summary
+    transactionType: string;     // "income" | "expense" | "transfer"
+    category: string;            // Transaction category
+    amount: number;              // Transaction amount
+    originalText: string;        // Original transaction text
+    createdAt: string;           // ISO timestamp
+    embeddingModel: string;      // "text-embedding-3-small"
+  };
+}
 ```
-/Users/dorr/Documents/repos/mastra-finance-home-ai/data/finance.db
+
+## 🔍 **Search Capabilities**
+
+### **Semantic Search**
+
+The vector search supports:
+
+- **Similarity Queries**: Find transactions similar to a given text
+- **Metadata Filtering**: Filter by category, type, amount ranges
+- **Top-K Results**: Configurable result count (default: 5)
+- **Score Thresholds**: Filter by similarity scores
+
+### **Query Example**
+
+```typescript
+const results = await store.query({
+  indexName: 'finance-transactions',
+  queryVector: embeddingVector,
+  topK: 5,
+  filter: {
+    category: { $eq: 'food' },
+    amount: { $gte: 10, $lte: 100 }
+  }
+});
 ```
 
-## Database Schema
+## 🚀 **Performance Characteristics**
 
-### Tables
+### **Query Performance**
 
-#### `transactions`
-Main table storing transaction analysis results:
-- `id` (TEXT, PRIMARY KEY) - Unique transaction identifier
-- `original_text` (TEXT) - Original transaction text from bank statement
-- `hebrew_summary` (TEXT) - AI-generated Hebrew summary (50-200 chars)
-- `english_summary` (TEXT) - AI-generated English summary (50-200 chars)
-- `transaction_type` (TEXT) - Type: 'regular', 'monthly', or 'credit'
-- `category` (TEXT) - Category like 'clothing_shoes', 'food_beverage', etc.
-- `amount` (REAL) - Transaction amount extracted from text
-- `created_at` (DATETIME) - Timestamp when record was created
-- `embedding_model` (TEXT) - AI model used (default: 'text-embedding-3-small')
+- **Latency**: ~50-200ms globally (edge-optimized)
+- **Throughput**: Scales automatically with demand
+- **Accuracy**: Cosine similarity with 32-bit float precision
 
-#### `transaction_embeddings`
-Stores vector embeddings for similarity search:
-- `id` (INTEGER, PRIMARY KEY) - Auto-increment ID
-- `transaction_id` (TEXT) - References transactions.id
-- `embedding_type` (TEXT) - 'hebrew' or 'english'
-- `embedding_vector` (TEXT) - JSON array of 1536 float values
+### **Storage Limits**
 
-## Connecting with Database Admin Tools
+- **Vectors per Index**: Up to 5M vectors (Worker plan)
+- **Metadata Size**: Up to 8KB per vector
+- **Index Count**: Multiple indexes supported
 
-### 1. DB Browser for SQLite (Recommended)
-- Download: https://sqlitebrowser.org/
-- Open the database file directly
-- Browse tables, run queries, view data
+## 🔧 **Configuration**
 
-### 2. DBeaver (Professional)
-- Download: https://dbeaver.io/
-- Create new SQLite connection
-- Point to the database file path
+### **Environment Variables**
 
-### 3. TablePlus (Mac)
-- Available on Mac App Store
-- Create SQLite connection
-- Beautiful interface for data exploration
-
-### 4. Command Line Access
 ```bash
-# Connect to database
-sqlite3 /Users/dorr/Documents/repos/mastra-finance-home-ai/data/finance.db
-
-# Sample queries
-.tables                                    # List all tables
-.schema transactions                       # Show table schema
-SELECT COUNT(*) FROM transactions;        # Count transactions
-SELECT * FROM transactions ORDER BY created_at DESC LIMIT 5;  # Latest 5 transactions
+# Required for Cloudflare Vectorize
+CF_ACCOUNT_ID=your_account_id
+CF_API_TOKEN=your_api_token
+VECTOR_STORAGE_MODE=cloudflare
 ```
 
-## Useful SQL Queries
+### **API Token Permissions**
 
-### View All Transactions
-```sql
-SELECT 
-  t.id,
-  t.hebrew_summary,
-  t.english_summary,
-  t.transaction_type,
-  t.category,
-  t.amount,
-  t.created_at
-FROM transactions t
-ORDER BY t.created_at DESC;
+Your Cloudflare API token needs:
+
+- `Cloudflare Workers:Edit` - For Vectorize operations
+- `Account:Read` - For account access
+- `Zone:Read` - For zone access (if applicable)
+
+## 📊 **Monitoring & Analytics**
+
+### **Cloudflare Dashboard**
+
+Monitor your vector database through:
+
+- **Vectorize Analytics**: Query volume, latency, errors
+- **Usage Metrics**: Storage consumption, API calls
+- **Performance Insights**: Regional performance data
+
+### **Application Logging**
+
+The application logs:
+
+- Vector insertions with success/failure status
+- Query performance and result counts
+- Error details for troubleshooting
+
+## 🔄 **Data Management**
+
+### **Backup & Recovery**
+
+- **Automatic Replication**: Cloudflare handles data replication
+- **No Manual Backups**: Serverless infrastructure managed by Cloudflare
+- **Data Export**: Use query API to export data if needed
+
+### **Index Management**
+
+```typescript
+// Create index
+await store.createIndex({
+  indexName: 'finance-transactions',
+  dimension: 1536
+});
+
+// Delete index (careful!)
+await store.deleteIndex({
+  indexName: 'finance-transactions'
+});
 ```
 
-### Search by Category
-```sql
-SELECT * FROM transactions 
-WHERE category = 'clothing_shoes' 
-ORDER BY created_at DESC;
-```
+## 🔍 **Troubleshooting**
 
-### Search by Amount Range
-```sql
-SELECT * FROM transactions 
-WHERE amount BETWEEN 100 AND 1000 
-ORDER BY amount DESC;
-```
+### **Common Issues**
 
-### Monthly Summary
-```sql
-SELECT 
-  category,
-  COUNT(*) as transaction_count,
-  SUM(amount) as total_amount,
-  AVG(amount) as avg_amount
-FROM transactions 
-WHERE created_at >= date('now', '-30 days')
-GROUP BY category
-ORDER BY total_amount DESC;
-```
+1. **Authentication Errors**
+   - Verify `CF_ACCOUNT_ID` and `CF_API_TOKEN`
+   - Check API token permissions
+   - Ensure Vectorize is enabled for your account
 
-### View Embeddings
-```sql
-SELECT 
-  t.id,
-  t.hebrew_summary,
-  he.embedding_type,
-  LENGTH(he.embedding_vector) as embedding_length
-FROM transactions t
-JOIN transaction_embeddings he ON t.id = he.transaction_id
-WHERE he.embedding_type = 'hebrew'
-LIMIT 5;
-```
+2. **Index Not Found**
+   - Indexes are created automatically on first use
+   - Check Cloudflare dashboard for existing indexes
+   - Verify index name matches configuration
 
-## Environment Configuration
+3. **Query Timeouts**
+   - Large result sets may take longer
+   - Consider reducing `topK` parameter
+   - Check network connectivity
 
-To ensure SQLite vector storage is used, set your `.env` file:
-```
-VECTOR_STORAGE_MODE=sqlite
-```
+### **Error Codes**
 
-## Current Status
-✅ Database created and initialized
-✅ Tables and indexes created
-✅ Test data inserted successfully
-✅ Both Hebrew and English embeddings stored
-✅ Search functionality working
-✅ Ready for external database tool connections
+- `1005`: Unknown content type (check request format)
+- `1006`: Invalid vector dimension
+- `1007`: Index not found
+- `1008`: Rate limit exceeded
 
-## Next Steps
-1. Download and install a database admin tool
-2. Connect using the database file path above
-3. Explore your transaction data
-4. Run custom queries for analysis
-5. Export data if needed for reporting 
+## 📈 **Scaling Considerations**
+
+### **Performance Optimization**
+
+- **Batch Operations**: Group multiple upserts for efficiency
+- **Metadata Indexing**: Create indexes for frequently filtered fields
+- **Query Optimization**: Use appropriate `topK` values
+
+### **Cost Management**
+
+- **Query Optimization**: Efficient queries reduce costs
+- **Storage Cleanup**: Remove old/unused vectors
+- **Monitoring**: Track usage through Cloudflare dashboard
+
+## 🔗 **Related Resources**
+
+- [Cloudflare Vectorize Documentation](https://developers.cloudflare.com/vectorize/)
+- [Mastra Vectorize Package](https://github.com/mastra-ai/mastra)
+- [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
+- [Environment Setup Guide](ENVIRONMENT-SETUP.md) 

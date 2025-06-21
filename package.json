@@ -17,8 +17,7 @@
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/rag": "^1.0.0",
-    "@types/better-sqlite3": "^7.6.13",
-    "better-sqlite3": "^11.10.0",
+    "@mastra/vectorize": "^0.10.2",
     "dotenv": "^16.5.0",
     "zod": "^3.25.56"
   },

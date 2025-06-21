@@ -1,4 +1,4 @@
-// Vector Storage Provider Exports
+// Vector Storage Provider Exports - Cloudflare Only
 
 // Base interfaces and types
 export type {
@@ -9,9 +9,8 @@ export type {
   VectorMetadata
 } from './base';
 
-// Local provider implementations
-export { MockVectorProvider } from './mock';
-export { SQLiteProvider } from './sqlite';
+// Cloudflare Vectorize provider
+export { CloudflareVectorizeProvider } from './cloudflare';
 
 // Factory function
 export { createVectorStorageProvider, getProviderInfo } from './factory'; 

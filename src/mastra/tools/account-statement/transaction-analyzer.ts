@@ -163,11 +163,7 @@ const analyzeTransaction = async (
       }
     ];
     
-    // Store both embeddings in a special way for SQLite
-    // We'll use a custom property on the SQLite provider
-    if (vectorProvider.name === 'SQLite') {
-      (vectorProvider as any).setEnglishEmbedding(vectorId, embeddingResults.embeddings[1]);
-    }
+
     
     const insertResult = await vectorProvider.insert(vectors);
     

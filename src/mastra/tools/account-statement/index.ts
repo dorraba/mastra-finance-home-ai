@@ -1,4 +1,4 @@
-// Account Statement Analysis Tools
+// Account Statement Analysis Tools - Cloudflare Vectorize
 
 // Core tools
 export { creditCardDataExtractorTool } from './credit-card-extractor';
@@ -7,8 +7,7 @@ export { vectorSearchTool } from './vector-search';
 
 // Vector storage provider implementations and factory
 export {
-  MockVectorProvider,
-  SQLiteProvider,
+  CloudflareVectorizeProvider,
   createVectorStorageProvider,
   getProviderInfo
 } from './providers/vector-storage';

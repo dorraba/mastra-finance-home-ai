@@ -1,9 +1,10 @@
-// Environment Configuration for Mastra Finance AI
+// Environment Configuration for Mastra Finance AI - Cloudflare Only
 
 export interface Environment {
   openaiApiKey: string;
   isProduction: boolean;
-  vectorStorageMode: 'mock' | 'sqlite' | 'auto';
+  cloudflareAccountId: string;
+  cloudflareApiToken: string;
 }
 
 /**
@@ -38,25 +39,26 @@ export function loadEnvironment(): Environment {
 
   const isProduction = process.env.NODE_ENV === 'production';
   
-  // Determine vector storage mode
-  const mode = process.env.VECTOR_STORAGE_MODE?.toLowerCase();
-  let vectorStorageMode: 'mock' | 'sqlite' | 'auto' = 'auto';
+  // Get required Cloudflare credentials
+  const cloudflareAccountId = process.env.CF_ACCOUNT_ID;
+  const cloudflareApiToken = process.env.CF_API_TOKEN;
   
-  envLog(`Raw VECTOR_STORAGE_MODE: "${process.env.VECTOR_STORAGE_MODE}"`);
-  
-  if (mode === 'mock' || mode === 'sqlite') {
-    vectorStorageMode = mode;
-    envLog(`Vector storage mode set to: ${vectorStorageMode}`);
-  } else if (mode && mode !== 'auto') {
-    envLog(`Invalid VECTOR_STORAGE_MODE "${mode}". Valid options: mock, sqlite, auto. Defaulting to auto.`, 'warn');
-  } else {
-    envLog(`Vector storage mode: auto (will choose best available provider)`);
+  if (!cloudflareAccountId || !cloudflareApiToken) {
+    throw new Error(
+      'Cloudflare credentials are required. Please set CF_ACCOUNT_ID and CF_API_TOKEN environment variables.\n' +
+      'See ENVIRONMENT-SETUP.md for setup instructions.'
+    );
   }
+  
+  envLog(`Cloudflare Vectorize credentials configured`);
+  envLog(`Account ID: ${cloudflareAccountId.substring(0, 8)}...`);
+  envLog(`API Token: ${cloudflareApiToken.substring(0, 8)}...`);
 
   return {
     openaiApiKey,
     isProduction,
-    vectorStorageMode,
+    cloudflareAccountId,
+    cloudflareApiToken,
   };
 }
 
