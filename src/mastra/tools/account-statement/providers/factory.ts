@@ -22,10 +22,10 @@ function createVectorizeAPIClient(): VectorizeBinding | null {
   envLog(`Account ID: ${accountId?.substring(0, 8)}...`);
   envLog(`API Token: ${apiToken?.substring(0, 8)}...`);
   
-  // Create a Vectorize client that uses the REST API
+  // Create a Vectorize client that uses the REST API (v2)
   return {
     async insert(vectors) {
-      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/insert`;
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/v2/indexes/finance-transactions/insert`;
       envLog(`Making INSERT request to: ${url}`);
       envLog(`Inserting ${vectors.length} vectors`);
       
@@ -55,7 +55,7 @@ function createVectorizeAPIClient(): VectorizeBinding | null {
     },
     
     async query(vector, options = {}) {
-      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/query`;
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/v2/indexes/finance-transactions/query`;
       envLog(`Making QUERY request to: ${url}`);
       
       const payload = {
