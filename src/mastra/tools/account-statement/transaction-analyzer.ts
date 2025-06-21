@@ -71,45 +71,48 @@ const analyzeTransaction = async (
       - Transaction amount 
       - Transaction nature
       
-      Extract and return data according to this schema:
-      - summary: Hebrew transaction summary (50-200 characters)
-      - englishSummary: English transaction summary (50-200 characters)  
-      - transactionType: regular/monthly/credit
-      - category: appropriate category from the list
+      You MUST return exactly these 4 fields:
+      1. summary: Hebrew transaction summary (exactly 50-200 characters)
+      2. englishSummary: English transaction summary (exactly 50-200 characters)  
+      3. transactionType: MUST be one of: "regular", "monthly", or "credit"
+      4. category: MUST be one of: "food_beverage", "transportation", "shopping_entertainment", "fuel", "healthcare", "education", "insurance", "mandatory_payments", "restaurants", "grocery", "clothing_shoes", "technology", "home_design", "sports_recreation", "banking_finance", "other"
       
-      CRITICAL: Both summaries MUST be at least 50 characters long and descriptive.
+      CRITICAL RULES:
+      - Both summaries MUST be at least 50 characters and at most 200 characters
+      - transactionType must be exactly one of the 3 allowed values
+      - category must be exactly one of the 16 allowed values
+      - Use proper Hebrew and English text
       
-      Examples of how to clean messy input:
+      Examples:
       
-      Input: "Tue Aug 27 2024 00:00:00 GMT+0300 אורבניקה 35 רגילה אופנה"
-      Extract: Merchant="אורבניקה", Amount="35", Type="clothing store"
-      Hebrew: "רכישה בחנות אורבניקה בסך 35 שקלים לקניית בגדים ואופנה"
-      English: "Purchase at Urbanica store for 35 NIS for clothing and fashion items"
+      Input: "אורבניקה 35"
+      Output:
+      - summary: "רכישה בחנות אורבניקה בסך 35 שקלים לקניית בגדים ואופנה יפה ומעוצבת"
+      - englishSummary: "Purchase at Urbanica store for 35 NIS for clothing and fashion items"
+      - transactionType: "regular"
+      - category: "clothing_shoes"
       
       Input: "עירית נתניה הוראת קבע 942.55"
-      Extract: Merchant="עירית נתניה", Amount="942.55", Type="municipality payment"
-      Hebrew: "תשלום חודשי לעירית נתניה בסך 942.55 שקלים עבור מסים ותשלומי חובה"
-      English: "Monthly payment to Netanya Municipality for 942.55 NIS for taxes and mandatory payments"
+      Output:
+      - summary: "תשלום חודשי לעירית נתניה בסך 942.55 שקלים עבור מסים ותשלומי חובה עירוניים"
+      - englishSummary: "Monthly payment to Netanya Municipality for 942.55 NIS for taxes and mandatory payments"
+      - transactionType: "monthly"
+      - category: "mandatory_payments"
       
-      Formula for descriptive summaries:
-      Hebrew: "תשלום/רכישה ב[merchant] בסך [amount] שקלים עבור [category description]"
-      English: "Payment/Purchase at [merchant] for [amount] NIS for [category description]"
-      
-      IGNORE: timestamps, existing categories, English dates, GMT references
-      FOCUS: merchant name, amount, transaction nature
-      CREATE: proper Hebrew and English summaries (50-200 chars each)
+      Make sure your response is exactly in the required format with valid values only.
     `,
     schema: z.object({
       summary: z.string().min(50, 'Summary must be at least 50 characters').max(200, 'Summary max 200 characters'),
       englishSummary: z.string().min(50, 'English summary must be at least 50 characters').max(200, 'English summary max 200 characters'),
-      transactionType: TransactionTypeSchema,
-      category: TransactionCategorySchema
+      transactionType: z.enum(['regular', 'monthly', 'credit']).describe('Transaction type: regular, monthly, or credit'),
+      category: z.enum(['food_beverage', 'transportation', 'shopping_entertainment', 'fuel', 'healthcare', 'education', 'insurance', 'mandatory_payments', 'restaurants', 'grocery', 'clothing_shoes', 'technology', 'home_design', 'sports_recreation', 'banking_finance', 'other']).describe('Transaction category')
     }),
   }).catch(error => {
     console.error('=== GENERATE OBJECT SCHEMA ERROR ===');
     console.error('Input text:', cleanedText);
     console.error('Error:', error);
     console.error('Error message:', error?.message);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     console.error('=====================================');
     throw error;
   });
