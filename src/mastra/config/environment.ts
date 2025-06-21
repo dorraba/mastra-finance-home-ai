@@ -52,22 +52,54 @@ export function getEnvironmentConfig(): EnvironmentConfig {
 }
 
 /**
- * Environment-specific logging
+ * Get the global Mastra logger instance
+ */
+function getMastraLogger() {
+  try {
+    // Try to access the global Mastra instance
+    const globalThis_ = globalThis as any;
+    return globalThis_?.mastra?.logger || globalThis_?.logger;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Environment-specific logging using Mastra's global logger
  */
 export function envLog(message: string, level: 'info' | 'warn' | 'error' = 'info') {
   const config = getEnvironmentConfig();
   const prefix = config.isDevelopment ? '🔧 [DEV]' : '🚀 [PROD]';
+  const logMessage = `${prefix} ${message}`;
   
-  switch (level) {
-    case 'info':
-      console.log(`${prefix} ${message}`);
-      break;
-    case 'warn':
-      console.warn(`${prefix} ${message}`);
-      break;
-    case 'error':
-      console.error(`${prefix} ${message}`);
-      break;
+  const logger = getMastraLogger();
+  
+  if (logger) {
+    // Use Mastra's logger if available
+    switch (level) {
+      case 'info':
+        logger.info(logMessage);
+        break;
+      case 'warn':
+        logger.warn(logMessage);
+        break;
+      case 'error':
+        logger.error(logMessage);
+        break;
+    }
+  } else {
+    // Fallback to console logging for development
+    switch (level) {
+      case 'info':
+        console.log(logMessage);
+        break;
+      case 'warn':
+        console.warn(logMessage);
+        break;
+      case 'error':
+        console.error(logMessage);
+        break;
+    }
   }
 }
 

@@ -14,3 +14,6 @@ export const mastra = new Mastra({
     level: 'info',
   }),
 });
+
+// Expose the Mastra instance globally for logger access
+(globalThis as any).mastra = mastra;

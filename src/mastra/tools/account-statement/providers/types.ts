@@ -1,5 +1,7 @@
 // TypeScript types for Cloudflare Vectorize binding
 
+import { envLog } from '../../../config/environment';
+
 export interface VectorizeVector {
   id: string;
   values: number[];
@@ -44,12 +46,36 @@ export interface VectorizeBinding {
  * Type guard to check if an object is a valid Vectorize binding
  */
 export function isVectorizeBinding(obj: unknown): obj is VectorizeBinding {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'insert' in obj &&
-    'query' in obj &&
-    typeof (obj as any).insert === 'function' &&
-    typeof (obj as any).query === 'function'
-  );
+  envLog('🔍 Checking if object is VectorizeBinding...');
+  envLog(`🔍 obj is null: ${obj === null}`);
+  envLog(`🔍 typeof obj: ${typeof obj}`);
+  
+  if (obj === null || typeof obj !== 'object') {
+    envLog('🔍 ❌ Failed: obj is null or not an object');
+    return false;
+  }
+  
+  const hasInsert = 'insert' in obj;
+  const hasQuery = 'query' in obj;
+  envLog(`🔍 has insert property: ${hasInsert}`);
+  envLog(`🔍 has query property: ${hasQuery}`);
+  
+  if (!hasInsert || !hasQuery) {
+    envLog('🔍 ❌ Failed: missing insert or query property');
+    envLog(`🔍 Available properties: ${Object.keys(obj).join(', ')}`);
+    return false;
+  }
+  
+  const insertType = typeof (obj as any).insert;
+  const queryType = typeof (obj as any).query;
+  envLog(`🔍 insert type: ${insertType}`);
+  envLog(`🔍 query type: ${queryType}`);
+  
+  if (insertType !== 'function' || queryType !== 'function') {
+    envLog('🔍 ❌ Failed: insert or query is not a function');
+    return false;
+  }
+  
+  envLog('🔍 ✅ Success: object is a valid VectorizeBinding');
+  return true;
 } 
