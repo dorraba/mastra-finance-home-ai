@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { creditCardDataExtractorTool, transactionAnalyzerTool } from '../tools/account-statement';
+import { creditCardDataExtractorTool, transactionAnalyzerTool, vectorSearchTool } from '../tools/account-statement';
 
 export const accountStatementAnalyzerAgent = new Agent({
   name: 'Account Statement Analyzer',
@@ -34,12 +34,16 @@ export const accountStatementAnalyzerAgent = new Agent({
       - קניות ובילוי (Shopping & Entertainment)
       - And more specialized categories
 
+      You can use the vectorSearchTool to search for similar transactions in the database.
+      The vectorSearchTool is a tool that allows you to search for similar transactions in the database.
+      The vectorSearchTool is a tool that allows you to search for similar transactions in the database.
       Always provide accurate Hebrew text processing and maintain context for Israeli financial terminology.
       When processing CSV data, handle it line by line and provide structured analysis for each transaction.
 `,
   model: openai(process.env.MODEL ?? "gpt-4o"),
   tools: { 
     creditCardDataExtractorTool,
-    transactionAnalyzerTool 
+    transactionAnalyzerTool,
+    vectorSearchTool
   },
 }); 
