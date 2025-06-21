@@ -7,58 +7,113 @@ import { VectorizeBinding } from './types';
 import { ENV, envLog } from '../../../config/environment';
 
 /**
+ * Create a Vectorize client using Cloudflare API when bindings aren't available
+ */
+function createVectorizeAPIClient(): VectorizeBinding | null {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  
+  if (!accountId || !apiToken) {
+    envLog('Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN for API client', 'warn');
+    return null;
+  }
+  
+  envLog('Creating Vectorize API client with account ID and token');
+  
+  // Create a Vectorize client that uses the REST API
+  return {
+    async insert(vectors) {
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/insert`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ vectors }),
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Vectorize insert failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return { mutationId: result.result?.mutationId || 'api_insert' };
+    },
+    
+    async query(vector, options = {}) {
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/query`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            vector,
+            topK: options.topK || 5,
+            returnValues: options.returnValues || false,
+            returnMetadata: options.returnMetadata || 'all',
+            filter: options.filter,
+          }),
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Vectorize query failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return { matches: result.result?.matches || [] };
+    },
+  };
+}
+
+/**
  * Create the appropriate vector storage provider based on environment and availability
  */
 export function createVectorStorageProvider(vectorDB?: VectorizeBinding | unknown): VectorStorageProvider {
   envLog(`Creating vector storage provider (env: ${ENV.environment}, mode: ${ENV.vectorStorageMode})`);
   
-  // Try to get vectorDB from global environment if not provided
-  let actualVectorDB = vectorDB;
-  if (!actualVectorDB) {
-    // In Cloudflare Workers/Mastra Cloud, bindings are available on globalThis.env
-    try {
-      actualVectorDB = (globalThis as any)?.env?.FINANCE_VECTORS;
-      if (actualVectorDB) {
-        envLog('Found FINANCE_VECTORS binding in global environment');
-      }
-    } catch (error) {
-      envLog('Could not access global environment bindings', 'warn');
-    }
-  }
-  
-  envLog(`VectorDB available: ${actualVectorDB ? 'yes' : 'no'}, type: ${typeof actualVectorDB}`);
-  
-  // Handle explicit mode override
+  // Handle explicit mock mode
   if (ENV.vectorStorageMode === 'mock') {
     const mockProvider = new MockVectorProvider();
     envLog(`Using ${mockProvider.name} (forced by VECTOR_STORAGE_MODE=mock)`);
     return mockProvider;
   }
   
-  if (ENV.vectorStorageMode === 'cloudflare') {
-    const cloudflareProvider = new CloudflareVectorizeProvider(actualVectorDB);
-    if (cloudflareProvider.isAvailable()) {
-      envLog(`Using ${cloudflareProvider.name} (forced by VECTOR_STORAGE_MODE=cloudflare)`);
-      return cloudflareProvider;
-    } else {
-      envLog('Cloudflare Vectorize forced but not available, falling back to Mock', 'warn');
-      envLog(`VectorDB binding check failed - ensure FINANCE_VECTORS binding is configured`, 'warn');
-      const mockProvider = new MockVectorProvider();
-      envLog(`Using ${mockProvider.name} as fallback`);
-      return mockProvider;
+  // In production or when explicitly set to cloudflare, use API client
+  if (ENV.isProduction || ENV.vectorStorageMode === 'cloudflare') {
+    envLog('Creating Cloudflare Vectorize API client for production');
+    const apiClient = createVectorizeAPIClient();
+    
+    if (!apiClient) {
+      const errorMsg = 'Cloudflare Vectorize API client could not be created. Check CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables.';
+      envLog(errorMsg, 'error');
+      throw new Error(errorMsg);
     }
-  }
-  
-  // Auto mode: Try Cloudflare first, fallback to Mock
-  const cloudflareProvider = new CloudflareVectorizeProvider(actualVectorDB);
-  if (cloudflareProvider.isAvailable()) {
-    envLog(`Using ${cloudflareProvider.name} (auto-detected)`);
+    
+    const cloudflareProvider = new CloudflareVectorizeProvider(apiClient);
+    envLog(`Using ${cloudflareProvider.name} (API client)`);
     return cloudflareProvider;
   }
   
-  // Fallback to mock provider
+  // Development mode: try API client first, fall back to mock
+  envLog('Development mode: attempting to use Cloudflare API client');
+  const apiClient = createVectorizeAPIClient();
+  
+  if (apiClient) {
+    const cloudflareProvider = new CloudflareVectorizeProvider(apiClient);
+    envLog(`Using ${cloudflareProvider.name} (API client in development)`);
+    return cloudflareProvider;
+  }
+  
+  // Fall back to mock in development only
   const mockProvider = new MockVectorProvider();
-  envLog(`Using ${mockProvider.name} (auto-fallback for ${ENV.environment})`);
+  envLog(`Using ${mockProvider.name} (development fallback - missing Cloudflare credentials)`);
   return mockProvider;
 }
 
