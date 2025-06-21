@@ -1,7 +1,7 @@
 // Vector Storage Provider Exports
 
 // Base interfaces and types
-export {
+export type {
   VectorStorageProvider,
   VectorRecord,
   VectorSearchResult,

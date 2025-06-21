@@ -5,28 +5,36 @@ export { creditCardDataExtractorTool } from './credit-card-extractor';
 export { transactionAnalyzerTool } from './transaction-analyzer';
 export { vectorSearchTool } from './vector-search';
 
-// Vector storage providers
+// Vector storage provider implementations and factory
 export {
-  VectorStorageProvider,
-  VectorRecord,
-  VectorSearchResult,
-  VectorSearchOptions,
-  VectorMetadata,
   MockVectorProvider,
   SQLiteProvider,
   createVectorStorageProvider,
   getProviderInfo
 } from './providers/vector-storage';
 
-// Types and schemas (all exports from types.ts)
+// Vector storage provider types
+export type {
+  VectorStorageProvider,
+  VectorRecord,
+  VectorSearchResult,
+  VectorSearchOptions,
+  VectorMetadata
+} from './providers/vector-storage';
+
+// Schema exports (Zod schemas)
 export {
   CreditCardDataSchema,
-  CreditCardData,
   TransactionAnalysisSchema,
-  TransactionAnalysis,
   TransactionTypeSchema,
+  TransactionCategorySchema
+} from './types';
+
+// Type exports (TypeScript types)
+export type {
+  CreditCardData,
+  TransactionAnalysis,
   TransactionType,
-  TransactionCategorySchema,
   TransactionCategory
 } from './types';
 
