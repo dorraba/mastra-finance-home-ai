@@ -53,12 +53,9 @@ const analyzeTransaction = async (
 ): Promise<TransactionAnalysis & { vectorId?: string; mutationId?: string }> => {
   // Clean the input text first
   const cleanedText = cleanTransactionText(transactionText);
-  console.log('Original transaction:', transactionText);
-  console.log('Cleaned transaction:', cleanedText);
   
   // Generate prompt from schema
   const schemaPrompt = generatePromptFromSchema(TransactionAnalysisSchema);
-  console.log('Generated schema prompt:', schemaPrompt);
   
   // Generate the transaction analysis (text fields only)
   const analysisResult = await generateObject({
@@ -110,13 +107,6 @@ const analyzeTransaction = async (
     }),
   });
 
-  console.log('AI generated analysis:', analysisResult.object);
-
-  // Generate embeddings for both summaries
-  console.log('Generating embeddings...');
-  console.log('Hebrew summary:', analysisResult.object.summary);
-  console.log('English summary:', analysisResult.object.englishSummary);
-  
   // Use embedMany for better performance and cleaner code
   const embeddingResults = await embedMany({
     model: openai.embedding('text-embedding-3-small'),
@@ -125,11 +115,6 @@ const analyzeTransaction = async (
       analysisResult.object.englishSummary
     ]
   });
-
-  console.log('Embeddings generated successfully');
-  console.log('Hebrew embedding length:', embeddingResults.embeddings[0].length);
-  console.log('English embedding length:', embeddingResults.embeddings[1].length);
-  console.log('First 5 values of Hebrew embedding:', embeddingResults.embeddings[0].slice(0, 5));
 
   // Replace placeholder embeddings with real ones
   const finalResult: TransactionAnalysis & { vectorId?: string; mutationId?: string } = {
@@ -169,12 +154,10 @@ const analyzeTransaction = async (
     ];
     
     const insertResult = await vectorProvider.insert(vectors);
-    console.log(`Successfully stored with ${vectorProvider.name}:`, insertResult.mutationId);
     
     finalResult.vectorId = vectorId;
     finalResult.mutationId = insertResult.mutationId;
   // }
 
-  console.log('Final result with embeddings ready');
   return finalResult;
 }; 
