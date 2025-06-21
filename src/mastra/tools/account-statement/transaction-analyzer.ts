@@ -28,8 +28,8 @@ export const transactionAnalyzerTool = createTool({
     vectorDB: z.unknown().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
   }),
   outputSchema: z.object({
-    summary: z.string().min(50).max(200).describe('Hebrew transaction summary'),
-    englishSummary: z.string().min(50).max(200).describe('English transaction summary'),
+    summary: z.string().describe('Hebrew transaction summary'),
+    englishSummary: z.string().describe('English transaction summary'),
     summaryEmbedding: z.array(z.number()).length(1536).describe('Vector embedding of Hebrew summary (1536 dimensions)'),
     englishSummaryEmbedding: z.array(z.number()).length(1536).describe('Vector embedding of English summary (1536 dimensions)'),
     transactionType: TransactionAnalysisSchema.shape.transactionType,
@@ -103,8 +103,8 @@ const analyzeTransaction = async (
       CREATE: proper Hebrew and English summaries (50-200 chars each)
     `,
     schema: z.object({
-      summary: z.string().min(50).max(200),
-      englishSummary: z.string().min(50).max(200),
+      summary: z.string(),
+      englishSummary: z.string(),
       transactionType: TransactionAnalysisSchema.shape.transactionType,
       category: TransactionAnalysisSchema.shape.category
     }),
