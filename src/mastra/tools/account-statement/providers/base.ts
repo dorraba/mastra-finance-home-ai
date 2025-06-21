@@ -25,7 +25,6 @@ export interface VectorSearchResult {
 
 export interface VectorSearchOptions {
   topK?: number;
-  minScore?: number;
   filters?: {
     transactionType?: string;
     category?: string;

@@ -1,48 +1,34 @@
-// Account statement analysis tools
+// Account Statement Analysis Tools
+
+// Core tools
 export { creditCardDataExtractorTool } from './credit-card-extractor';
 export { transactionAnalyzerTool } from './transaction-analyzer';
 export { vectorSearchTool } from './vector-search';
 
 // Vector storage providers
-export { 
-  createVectorStorageProvider,
-  getProviderInfo
-} from './providers/factory';
-
-export { 
-  CloudflareVectorizeProvider,
-  MockVectorProvider
-} from './providers/vector-storage';
-
-export type {
+export {
   VectorStorageProvider,
-  VectorMetadata,
   VectorRecord,
   VectorSearchResult,
-  VectorSearchOptions
-} from './providers/base';
+  VectorSearchOptions,
+  VectorMetadata,
+  MockVectorProvider,
+  SQLiteProvider,
+  createVectorStorageProvider,
+  getProviderInfo
+} from './providers/vector-storage';
 
-// Environment configuration
-export { ENV, getEnvironmentConfig, envLog } from '../../config/environment';
-
-// Schema and types
-export * from './types';
-
-// Utilities
-export { generatePromptFromSchema, getFieldDescription } from './schema-prompt-generator';
-
-// Zod Schemas (primary source of truth)
-export { 
+// Types and schemas (all exports from types.ts)
+export {
   CreditCardDataSchema,
+  CreditCardData,
   TransactionAnalysisSchema,
+  TransactionAnalysis,
   TransactionTypeSchema,
-  TransactionCategorySchema
+  TransactionType,
+  TransactionCategorySchema,
+  TransactionCategory
 } from './types';
 
-// Inferred TypeScript types
-export type { 
-  CreditCardData,
-  TransactionAnalysis,
-  TransactionType,
-  TransactionCategory
-} from './types'; 
+// Utilities
+export { generatePromptFromSchema, getFieldDescription } from './schema-prompt-generator'; 

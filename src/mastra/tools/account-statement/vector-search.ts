@@ -10,9 +10,7 @@ export const vectorSearchTool = createTool({
   description: 'Search for similar transactions using vector similarity search',
   inputSchema: z.object({
     searchQuery: z.string().describe('Search query in Hebrew or English to find similar transactions'),
-    vectorDB: z.unknown().optional().describe('Vector database binding (optional for local development)'),
     topK: z.number().min(1).max(20).default(5).describe('Number of similar transactions to return'),
-    minScore: z.number().min(0).max(1).default(0.7).describe('Minimum similarity score threshold'),
     filters: z.object({
       transactionType: z.string().optional().describe('Filter by transaction type'),
       category: z.string().optional().describe('Filter by category'),
@@ -39,10 +37,8 @@ export const vectorSearchTool = createTool({
   execute: async ({ context }) => {
     return await searchSimilarTransactions(
       context.searchQuery as string,
-      context.vectorDB,
       {
         topK: context.topK as number,
-        minScore: context.minScore as number,
         filters: context.filters
       }
     );
@@ -51,7 +47,6 @@ export const vectorSearchTool = createTool({
 
 const searchSimilarTransactions = async (
   searchQuery: string,
-  vectorDB: unknown,
   options: VectorSearchOptions
 ): Promise<{
   query: string;
@@ -73,7 +68,6 @@ const searchSimilarTransactions = async (
     console.log('=== VECTOR SEARCH DEBUG START ===');
     console.log('Search query:', searchQuery);
     console.log('Options:', JSON.stringify(options, null, 2));
-    console.log('VectorDB provided:', !!vectorDB);
     
     console.log('Generating embedding for search query:', searchQuery);
     
@@ -88,7 +82,7 @@ const searchSimilarTransactions = async (
 
     // Create the appropriate vector storage provider
     console.log('Creating vector storage provider...');
-    const vectorProvider = createVectorStorageProvider(vectorDB);
+    const vectorProvider = createVectorStorageProvider();
     console.log('Vector provider created:', vectorProvider.name);
     
     // Search for similar vectors using the provider

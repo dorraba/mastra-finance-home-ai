@@ -1,229 +1,188 @@
 # 🏗️ Vector Storage Provider Pattern
 
-This document explains the new modular provider pattern architecture for vector storage in the Mastra Finance AI project.
+This document explains the **Provider Pattern** implementation for vector storage in the Mastra Finance AI project, focusing on local development with SQLite and testing with Mock providers.
 
-## 📁 Architecture Overview
+## 📁 **File Structure**
 
 ```
-src/mastra/
-├── config/
-│   └── environment.ts              # 🆕 Environment detection & configuration
-└── tools/account-statement/
-    ├── providers/
-    │   ├── base.ts                  # 🆕 Base interfaces & types
-    │   ├── cloudflare-vectorize.ts  # 🆕 Cloudflare Vectorize provider
-    │   ├── mock.ts                  # 🆕 Mock provider for development
-    │   ├── factory.ts               # 🆕 Environment-aware provider factory
-    │   └── vector-storage.ts        # ✅ Main export file (re-exports)
-    ├── transaction-analyzer.ts      # ✅ Updated to use providers
-    ├── vector-search.ts            # ✅ Updated to use providers
-    └── index.ts                    # ✅ Updated exports
+src/mastra/tools/account-statement/providers/
+│
+├── base.ts                    # 🏛️ Base interfaces and types
+├── factory.ts                 # 🏭 Provider factory and selection logic
+├── mock.ts                    # 🎭 Mock provider for testing
+├── sqlite.ts                  # 📁 SQLite provider for local development
+└── vector-storage.ts          # 📦 Main export file
 ```
 
-## 🎯 Key Benefits
+## 🎯 **Core Philosophy**
 
-### ✅ **Separation of Concerns**
-- Each provider in its own file
-- Clear interfaces and contracts
-- Business logic separated from storage logic
+The Provider Pattern allows the application to seamlessly switch between different vector storage backends without changing the core business logic:
 
-### ✅ **Environment-Aware**
-- Automatic detection of development vs production
-- Smart provider selection based on environment
-- Override capabilities via environment variables
+- **Development**: Use SQLite for reliable local storage
+- **Testing**: Use Mock provider for fast, predictable tests
+- **Flexibility**: Easy to add new providers in the future
 
-### ✅ **Easy Extension**
-- Add new vector databases by implementing `VectorStorageProvider`
-- No changes needed to existing tools
-- Plug-and-play architecture
-
-### ✅ **Type Safety**
-- Full TypeScript interfaces
-- Consistent metadata structure
-- Compile-time error checking
-
-## 🔧 Environment Configuration
-
-### **Automatic Detection**
-The system automatically detects the environment based on:
-
-```typescript
-// Development indicators
-- NODE_ENV === 'development'
-- process.argv.includes('dev')
-- MASTRA_DEV === 'true'
-- HOSTNAME === 'localhost'
-- VERCEL_ENV === 'development'
-
-// Production indicators  
-- NODE_ENV === 'production'
-- Cloudflare Workers globals (caches, Request)
-- CF_PAGES_BRANCH !== 'preview'
-```
-
-### **Manual Override**
-Set environment variables to override automatic detection:
+## 🔧 **Environment Configuration**
 
 ```bash
-# Force mock provider (useful for testing)
+# Force SQLite provider (recommended)
+VECTOR_STORAGE_MODE=sqlite
+
+# Force Mock provider (testing)
 VECTOR_STORAGE_MODE=mock
 
-# Force Cloudflare provider (production)
-VECTOR_STORAGE_MODE=cloudflare
-
-# Auto-detection (default)
+# Auto-detection (defaults to SQLite)
 VECTOR_STORAGE_MODE=auto
 ```
 
-## 🏭 Provider Implementations
+## 🏛️ **Base Architecture**
 
-### **CloudflareVectorizeProvider**
-- **File**: `providers/cloudflare-vectorize.ts`
-- **Use Case**: Production deployment on Cloudflare Workers
-- **Features**: 
-  - Real vector similarity search
-  - Advanced filtering capabilities
-  - Metadata indexing
-  - High performance
+### **VectorStorageProvider Interface**
 
-### **MockVectorProvider**
-- **File**: `providers/mock.ts`
-- **Use Case**: Local development and testing
-- **Features**:
-  - In-memory vector storage
-  - Cosine similarity calculation
-  - Mock data generation
-  - No external dependencies
-
-## 🎮 Usage Examples
-
-### **Basic Usage**
 ```typescript
-import { createVectorStorageProvider } from './providers/factory';
-
-// Automatically selects appropriate provider
-const provider = createVectorStorageProvider(vectorDB);
-
-// Insert vectors
-await provider.insert([{
-  id: 'transaction_123',
-  values: embedding,
-  metadata: { /* ... */ }
-}]);
-
-// Search vectors
-const results = await provider.search(queryVector, {
-  topK: 5,
-  minScore: 0.7,
-  filters: { category: 'food_beverage' }
-});
-```
-
-### **Environment Information**
-```typescript
-import { getProviderInfo, ENV } from './providers/factory';
-
-console.log('Environment:', ENV.environment);
-console.log('Is Development:', ENV.isDevelopment);
-console.log('Vector Mode:', ENV.vectorStorageMode);
-
-const info = getProviderInfo(vectorDB);
-console.log('Recommended Provider:', info.recommendedProvider);
-console.log('Available Providers:', info.availableProviders);
-```
-
-### **Environment Logging**
-```typescript
-import { envLog } from '../../config/environment';
-
-envLog('Processing transaction analysis');        // Info
-envLog('Provider fallback activated', 'warn');    // Warning
-envLog('Vector storage failed', 'error');         // Error
-```
-
-## 🧪 Testing
-
-### **Local Development**
-```bash
-npm run dev
-# 🔧 [DEV] Using MockVector for local development
-```
-
-### **Production Deployment**
-```bash
-wrangler deploy
-# 🚀 [PROD] Using CloudflareVectorize (auto-detected)
-```
-
-### **Force Mock Mode**
-```bash
-VECTOR_STORAGE_MODE=mock npm run dev
-# 🔧 [DEV] Using MockVector (forced by VECTOR_STORAGE_MODE=mock)
-```
-
-## 🔮 Future Extensions
-
-### **Adding New Providers**
-1. Create new provider file: `providers/pinecone.ts`
-2. Implement `VectorStorageProvider` interface
-3. Add to factory selection logic
-4. Export from `vector-storage.ts`
-
-### **Example: Pinecone Provider**
-```typescript
-// providers/pinecone.ts
-export class PineconeProvider implements VectorStorageProvider {
-  name = 'Pinecone';
-  
-  constructor(private pineconeClient: any) {}
-  
-  isAvailable(): boolean {
-    return this.pineconeClient && this.pineconeClient.apiKey;
-  }
-  
-  async insert(vectors: VectorRecord[]): Promise<{ mutationId: string }> {
-    // Pinecone implementation
-  }
-  
-  async search(queryVector: number[], options?: VectorSearchOptions): Promise<VectorSearchResult[]> {
-    // Pinecone implementation
-  }
+interface VectorStorageProvider {
+  name: string;
+  isAvailable(): boolean;
+  insert(vectors: VectorRecord[]): Promise<{ mutationId: string }>;
+  search(queryVector: number[], options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
 }
 ```
 
-## 📊 Environment Detection Logic
+## 🏭 **Provider Implementations**
 
-```mermaid
-flowchart TD
-    A[Start Provider Selection] --> B{VECTOR_STORAGE_MODE set?}
-    B -->|mock| C[Use MockProvider]
-    B -->|cloudflare| D{Vectorize Available?}
-    B -->|auto| E{Environment Detection}
-    
-    D -->|Yes| F[Use CloudflareProvider]
-    D -->|No| G[Warn & Use MockProvider]
-    
-    E --> H{Cloudflare Vectorize Available?}
-    H -->|Yes| I[Use CloudflareProvider]
-    H -->|No| J[Use MockProvider]
-    
-    C --> K[🔧 MockVector Active]
-    F --> L[🚀 CloudflareVectorize Active]
-    G --> M[⚠️ Fallback to MockVector]
-    I --> N[🚀 Auto-detected CloudflareVectorize]
-    J --> O[🔧 Auto-fallback MockVector]
+### **SQLiteProvider**
+- **File**: `providers/sqlite.ts`
+- **Use Case**: Local development and production
+- **Features**: 
+  - Real vector similarity calculations
+  - Persistent storage in SQLite database
+  - Full transaction metadata support
+  - Cosine similarity search
+
+### **MockVectorProvider**
+- **File**: `providers/mock.ts`
+- **Use Case**: Testing and development fallback
+- **Features**:
+  - In-memory storage
+  - Predictable mock data
+  - Fast execution
+  - No external dependencies
+
+## 🚀 **Factory Logic**
+
+The `createVectorStorageProvider()` function automatically selects the best provider:
+
+```typescript
+export function createVectorStorageProvider(): VectorStorageProvider {
+  // 1. Check explicit mode setting
+  if (ENV.vectorStorageMode === 'sqlite') {
+    return new SQLiteProvider();
+  }
+  
+  if (ENV.vectorStorageMode === 'mock') {
+    return new MockVectorProvider();
+  }
+  
+  // 2. Auto mode: prefer SQLite
+  return new SQLiteProvider();
+}
 ```
 
-## 🎉 Migration Complete
+## 🔍 **Provider Selection Flow**
 
-Your vector storage system now features:
+```mermaid
+graph TD
+    A[Start] --> B{VECTOR_STORAGE_MODE?}
+    B -->|sqlite| C[Use SQLiteProvider]
+    B -->|mock| D[Use MockProvider]
+    B -->|auto| E[Use SQLiteProvider as default]
+    
+    C --> F[✅ SQLite Active]
+    D --> G[🎭 Mock Active]
+    E --> H[📁 Auto-detected SQLite]
+```
 
-- ✅ **Clean Architecture**: Each provider in its own file
-- ✅ **Environment Detection**: Automatic dev/prod detection
-- ✅ **Smart Fallbacks**: Graceful degradation when services unavailable
-- ✅ **Type Safety**: Full TypeScript support
-- ✅ **Easy Testing**: Mock provider for development
-- ✅ **Production Ready**: Cloudflare Vectorize integration
-- ✅ **Future Proof**: Easy to add new vector databases
+## 📊 **Provider Comparison**
 
-The provider pattern eliminates vendor lock-in and makes your vector storage layer truly modular and maintainable! 🎯 
+| Feature | SQLite | Mock |
+|---------|--------|------|
+| **Storage** | Persistent | In-memory |
+| **Performance** | Fast | Very fast |
+| **Similarity** | Real cosine similarity | Mock scores |
+| **Development** | ✅ Recommended | ✅ Testing only |
+| **Production** | ✅ Suitable | ❌ Not recommended |
+| **Dependencies** | better-sqlite3 | None |
+
+## 🧪 **Usage Examples**
+
+### **Manual Provider Creation**
+
+```typescript
+import { SQLiteProvider, MockVectorProvider } from './providers/vector-storage';
+
+// Direct provider instantiation
+const sqliteProvider = new SQLiteProvider();
+const mockProvider = new MockVectorProvider();
+
+// Check availability
+console.log(sqliteProvider.isAvailable()); // true
+console.log(mockProvider.isAvailable());   // true
+```
+
+### **Factory Usage (Recommended)**
+
+```typescript
+import { createVectorStorageProvider } from './providers/factory';
+
+// Automatic provider selection based on environment
+const provider = createVectorStorageProvider();
+console.log(`Using: ${provider.name}`);
+
+// Insert vectors
+await provider.insert(vectors);
+
+// Search vectors
+const results = await provider.search(queryVector, { topK: 5 });
+```
+
+## 🔧 **Development Workflow**
+
+### **1. Local Development**
+```bash
+VECTOR_STORAGE_MODE=sqlite npm run dev
+# Uses SQLite for persistent local storage
+```
+
+### **2. Testing**
+```bash
+VECTOR_STORAGE_MODE=mock npm test
+# Uses Mock provider for fast, predictable tests
+```
+
+### **3. Auto Mode**
+```bash
+npm run dev
+# Automatically chooses SQLite as the best option
+```
+
+## 🎯 **Benefits**
+
+- ✅ **Flexibility**: Easy to switch between storage backends
+- ✅ **Testability**: Mock provider for reliable testing
+- ✅ **Performance**: SQLite provides fast local storage
+- ✅ **Simplicity**: Automatic provider selection
+- ✅ **Maintainability**: Clean separation of concerns
+- ✅ **Local Development**: No external dependencies required
+
+## 📈 **Future Extensions**
+
+The provider pattern makes it easy to add new storage backends:
+
+```typescript
+// Future providers could include:
+class PostgreSQLProvider implements VectorStorageProvider { ... }
+class RedisProvider implements VectorStorageProvider { ... }
+class FileSystemProvider implements VectorStorageProvider { ... }
+```
+
+This architecture ensures the application remains flexible and maintainable as requirements evolve. 

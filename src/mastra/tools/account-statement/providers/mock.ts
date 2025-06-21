@@ -37,7 +37,7 @@ export class MockVectorProvider implements VectorStorageProvider {
     queryVector: number[], 
     options: VectorSearchOptions = {}
   ): Promise<VectorSearchResult[]> {
-    const { topK = 5, minScore = 0.7, filters } = options;
+    const { topK = 5, filters } = options;
     
     console.log(`🔍 [${this.name}] Querying ${this.vectors.size} stored vectors...`);
     
@@ -57,13 +57,12 @@ export class MockVectorProvider implements VectorStorageProvider {
         continue;
       }
       
-      if (score >= minScore) {
-        matches.push({
-          id,
-          score,
-          metadata: storedVector.metadata
-        });
-      }
+      // Add all results (no threshold filtering)
+      matches.push({
+        id,
+        score,
+        metadata: storedVector.metadata
+      });
     }
     
     // Sort by score and take topK
@@ -72,7 +71,7 @@ export class MockVectorProvider implements VectorStorageProvider {
   }
   
   private getMockResults(options: VectorSearchOptions): VectorSearchResult[] {
-    const { topK = 5, minScore = 0.7, filters } = options;
+    const { topK = 5, filters } = options;
     
     const mockResults: VectorSearchResult[] = [
       {
@@ -125,7 +124,7 @@ export class MockVectorProvider implements VectorStorageProvider {
       if (filters?.category && result.metadata.category !== filters.category) return false;
       if (filters?.minAmount !== undefined && result.metadata.amount < filters.minAmount) return false;
       if (filters?.maxAmount !== undefined && result.metadata.amount > filters.maxAmount) return false;
-      return result.score >= minScore;
+      return true; // No score filtering
     });
     
     return filteredResults.slice(0, topK);

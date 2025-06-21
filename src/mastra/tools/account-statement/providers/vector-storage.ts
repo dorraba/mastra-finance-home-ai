@@ -1,29 +1,17 @@
-// Vector Storage Provider - Main Export File
-// Re-exports all provider components from separate files
+// Vector Storage Provider Exports
 
 // Base interfaces and types
-export type {
-  VectorMetadata,
+export {
+  VectorStorageProvider,
   VectorRecord,
   VectorSearchResult,
   VectorSearchOptions,
-  VectorStorageProvider
+  VectorMetadata
 } from './base';
 
-// Cloudflare Vectorize specific types
-export type {
-  VectorizeVector,
-  VectorizeQueryOptions,
-  VectorizeMatch,
-  VectorizeQueryResult,
-  VectorizeInsertResult,
-  VectorizeBinding
-} from './types';
-export { isVectorizeBinding } from './types';
-
-// Provider implementations
-export { CloudflareVectorizeProvider } from './cloudflare-vectorize';
+// Local provider implementations
 export { MockVectorProvider } from './mock';
+export { SQLiteProvider } from './sqlite';
 
-// Factory and utilities
+// Factory function
 export { createVectorStorageProvider, getProviderInfo } from './factory'; 

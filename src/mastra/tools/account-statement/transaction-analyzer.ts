@@ -24,8 +24,7 @@ export const transactionAnalyzerTool = createTool({
     transactionText: z.string()
       .min(5, 'Transaction text must contain meaningful content')
       .describe('Single Hebrew transaction text from bank statement including merchant name, amount, date, and transaction details for comprehensive analysis'),
-    storeInVector: z.boolean().default(true).describe('Whether to store the embeddings in Vectorize database'),
-    vectorDB: z.unknown().optional().describe('Cloudflare Vectorize binding (env.FINANCE_VECTORS)'),
+    storeInVector: z.boolean().default(true).describe('Whether to store the embeddings in the local vector database'),
   }),
   outputSchema: z.object({
     summary: z.string().describe('Hebrew transaction summary'),
@@ -34,22 +33,20 @@ export const transactionAnalyzerTool = createTool({
     englishSummaryEmbedding: z.array(z.number()).length(1536).describe('Vector embedding of English summary (1536 dimensions)'),
     transactionType: TransactionTypeSchema,
     category: TransactionCategorySchema,
-    vectorId: z.string().optional().describe('ID of the stored vector in Vectorize database'),
-    mutationId: z.string().optional().describe('Vectorize mutation ID for the storage operation'),
+    vectorId: z.string().optional().describe('ID of the stored vector in the local database'),
+    mutationId: z.string().optional().describe('Database mutation ID for the storage operation'),
   }),
   execute: async ({ context }) => {
     return await analyzeTransaction(
       context.transactionText, 
-      context.storeInVector, 
-      context.vectorDB
+      context.storeInVector
     );
   },
 });
 
 const analyzeTransaction = async (
   transactionText: string, 
-  storeInVector: boolean = true, 
-  vectorDB?: any
+  storeInVector: boolean = true
 ): Promise<TransactionAnalysis & { vectorId?: string; mutationId?: string }> => {
   // Clean the input text first
   const cleanedText = cleanTransactionText(transactionText);
@@ -137,9 +134,9 @@ const analyzeTransaction = async (
   };
 
   // Store in vector database if requested
-  // if (storeInVector) {
+  if (storeInVector) {
     // Create the appropriate vector storage provider
-    const vectorProvider = createVectorStorageProvider(vectorDB);
+    const vectorProvider = createVectorStorageProvider();
     
     // Extract amount from the transaction text for metadata
     const amountMatch = cleanedText.match(/[\d,]+\.?\d*/);
@@ -166,11 +163,17 @@ const analyzeTransaction = async (
       }
     ];
     
+    // Store both embeddings in a special way for SQLite
+    // We'll use a custom property on the SQLite provider
+    if (vectorProvider.name === 'SQLite') {
+      (vectorProvider as any).setEnglishEmbedding(vectorId, embeddingResults.embeddings[1]);
+    }
+    
     const insertResult = await vectorProvider.insert(vectors);
     
     finalResult.vectorId = vectorId;
     finalResult.mutationId = insertResult.mutationId;
-  // }
+  }
 
   return finalResult;
 }; 
