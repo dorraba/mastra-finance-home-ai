@@ -8,43 +8,20 @@ export interface EnvironmentConfig {
 }
 
 /**
- * Detect the current environment based on various indicators
+ * Detect the current environment based on NODE_ENV
  */
 function detectEnvironment(): 'development' | 'production' | 'test' {
-  // Check NODE_ENV first
-  if (process.env.NODE_ENV === 'production') {
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase();
+  
+  if (nodeEnv === 'production') {
     return 'production';
   }
   
-  if (process.env.NODE_ENV === 'test') {
+  if (nodeEnv === 'test') {
     return 'test';
   }
   
-  if (process.env.NODE_ENV === 'development') {
-    return 'development';
-  }
-  
-  // Check for Cloudflare Workers environment
-  if (typeof globalThis.caches !== 'undefined' && typeof globalThis.Request !== 'undefined') {
-    return 'production';
-  }
-  
-  // Check for Mastra dev environment
-  if (process.env.MASTRA_DEV === 'true' || process.argv.includes('dev')) {
-    return 'development';
-  }
-  
-  // Check for localhost or local development indicators
-  if (
-    process.env.HOSTNAME === 'localhost' ||
-    process.env.HOST === 'localhost' ||
-    process.env.VERCEL_ENV === 'development' ||
-    process.env.CF_PAGES_BRANCH === 'preview'
-  ) {
-    return 'development';
-  }
-  
-  // Default to development for safety
+  // Default to development (includes undefined, 'development', or any other value)
   return 'development';
 }
 

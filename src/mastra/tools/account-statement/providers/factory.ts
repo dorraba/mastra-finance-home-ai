@@ -10,7 +10,23 @@ import { ENV, envLog } from '../../../config/environment';
  * Create the appropriate vector storage provider based on environment and availability
  */
 export function createVectorStorageProvider(vectorDB?: VectorizeBinding | unknown): VectorStorageProvider {
-  envLog(`Creating vector storage provider (mode: ${ENV.vectorStorageMode})`);
+  envLog(`Creating vector storage provider (env: ${ENV.environment}, mode: ${ENV.vectorStorageMode})`);
+  
+  // Try to get vectorDB from global environment if not provided
+  let actualVectorDB = vectorDB;
+  if (!actualVectorDB) {
+    // In Cloudflare Workers/Mastra Cloud, bindings are available on globalThis.env
+    try {
+      actualVectorDB = (globalThis as any)?.env?.FINANCE_VECTORS;
+      if (actualVectorDB) {
+        envLog('Found FINANCE_VECTORS binding in global environment');
+      }
+    } catch (error) {
+      envLog('Could not access global environment bindings', 'warn');
+    }
+  }
+  
+  envLog(`VectorDB available: ${actualVectorDB ? 'yes' : 'no'}, type: ${typeof actualVectorDB}`);
   
   // Handle explicit mode override
   if (ENV.vectorStorageMode === 'mock') {
@@ -20,12 +36,13 @@ export function createVectorStorageProvider(vectorDB?: VectorizeBinding | unknow
   }
   
   if (ENV.vectorStorageMode === 'cloudflare') {
-    const cloudflareProvider = new CloudflareVectorizeProvider(vectorDB);
+    const cloudflareProvider = new CloudflareVectorizeProvider(actualVectorDB);
     if (cloudflareProvider.isAvailable()) {
       envLog(`Using ${cloudflareProvider.name} (forced by VECTOR_STORAGE_MODE=cloudflare)`);
       return cloudflareProvider;
     } else {
       envLog('Cloudflare Vectorize forced but not available, falling back to Mock', 'warn');
+      envLog(`VectorDB binding check failed - ensure FINANCE_VECTORS binding is configured`, 'warn');
       const mockProvider = new MockVectorProvider();
       envLog(`Using ${mockProvider.name} as fallback`);
       return mockProvider;
@@ -33,7 +50,7 @@ export function createVectorStorageProvider(vectorDB?: VectorizeBinding | unknow
   }
   
   // Auto mode: Try Cloudflare first, fallback to Mock
-  const cloudflareProvider = new CloudflareVectorizeProvider(vectorDB);
+  const cloudflareProvider = new CloudflareVectorizeProvider(actualVectorDB);
   if (cloudflareProvider.isAvailable()) {
     envLog(`Using ${cloudflareProvider.name} (auto-detected)`);
     return cloudflareProvider;
