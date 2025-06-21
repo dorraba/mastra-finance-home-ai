@@ -70,6 +70,11 @@ const searchSimilarTransactions = async (
   searchEmbedding: number[];
 }> => {
   try {
+    console.log('=== VECTOR SEARCH DEBUG START ===');
+    console.log('Search query:', searchQuery);
+    console.log('Options:', JSON.stringify(options, null, 2));
+    console.log('VectorDB provided:', !!vectorDB);
+    
     console.log('Generating embedding for search query:', searchQuery);
     
     // Generate embedding for the search query
@@ -79,11 +84,15 @@ const searchSimilarTransactions = async (
     });
 
     console.log('Search embedding generated, length:', embeddingResult.embeddings[0].length);
+    console.log('First 5 embedding values:', embeddingResult.embeddings[0].slice(0, 5));
 
     // Create the appropriate vector storage provider
+    console.log('Creating vector storage provider...');
     const vectorProvider = createVectorStorageProvider(vectorDB);
+    console.log('Vector provider created:', vectorProvider.name);
     
     // Search for similar vectors using the provider
+    console.log('Performing vector search...');
     const searchResults = await vectorProvider.search(embeddingResult.embeddings[0], options);
     
     console.log(`Found ${searchResults.length} results using ${vectorProvider.name}`);
@@ -101,6 +110,8 @@ const searchSimilarTransactions = async (
       createdAt: result.metadata.createdAt,
     }));
 
+    console.log('=== VECTOR SEARCH DEBUG END ===');
+
     return {
       query: searchQuery,
       results,
@@ -112,9 +123,20 @@ const searchSimilarTransactions = async (
     console.error('=== VECTOR SEARCH ERROR ===');
     console.error('Error type:', error?.constructor?.name);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Full error:', error);
     console.error('Search query:', searchQuery);
+    console.error('Options:', JSON.stringify(options, null, 2));
     console.error('========================');
     
-    throw error;
+    // Return detailed error information
+    const errorDetails = {
+      errorType: error?.constructor?.name || 'Unknown',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      searchQuery,
+      options,
+      timestamp: new Date().toISOString()
+    };
+    
+    throw new Error(`Vector search failed: ${JSON.stringify(errorDetails, null, 2)}`);
   }
 }; 

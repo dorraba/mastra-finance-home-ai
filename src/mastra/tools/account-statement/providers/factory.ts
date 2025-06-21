@@ -19,54 +19,81 @@ function createVectorizeAPIClient(): VectorizeBinding | null {
   }
   
   envLog('Creating Vectorize API client with account ID and token');
+  envLog(`Account ID: ${accountId?.substring(0, 8)}...`);
+  envLog(`API Token: ${apiToken?.substring(0, 8)}...`);
   
   // Create a Vectorize client that uses the REST API
   return {
     async insert(vectors) {
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/insert`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ vectors }),
-        }
-      );
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/insert`;
+      envLog(`Making INSERT request to: ${url}`);
+      envLog(`Inserting ${vectors.length} vectors`);
+      
+      const payload = { vectors };
+      envLog(`Request payload: ${JSON.stringify(payload, null, 2)}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      envLog(`INSERT Response status: ${response.status} ${response.statusText}`);
       
       if (!response.ok) {
-        throw new Error(`Vectorize insert failed: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        envLog(`INSERT Error response: ${errorText}`, 'error');
+        throw new Error(`Vectorize insert failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
       const result = await response.json();
+      envLog(`INSERT Success: ${JSON.stringify(result, null, 2)}`);
       return { mutationId: result.result?.mutationId || 'api_insert' };
     },
     
     async query(vector, options = {}) {
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/query`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            vector,
-            topK: options.topK || 5,
-            returnValues: options.returnValues || false,
-            returnMetadata: options.returnMetadata || 'all',
-            filter: options.filter,
-          }),
-        }
-      );
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/indexes/finance-transactions/query`;
+      envLog(`Making QUERY request to: ${url}`);
+      
+      const payload = {
+        vector,
+        topK: options.topK || 5,
+        returnValues: options.returnValues || false,
+        returnMetadata: options.returnMetadata || 'all',
+        filter: options.filter,
+      };
+      
+      envLog(`QUERY Request payload: ${JSON.stringify({
+        vectorLength: vector.length,
+        vectorSample: vector.slice(0, 3),
+        topK: payload.topK,
+        returnValues: payload.returnValues,
+        returnMetadata: payload.returnMetadata,
+        filter: payload.filter
+      }, null, 2)}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      envLog(`QUERY Response status: ${response.status} ${response.statusText}`);
       
       if (!response.ok) {
-        throw new Error(`Vectorize query failed: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        envLog(`QUERY Error response: ${errorText}`, 'error');
+        throw new Error(`Vectorize query failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
       const result = await response.json();
+      envLog(`QUERY Success: Found ${result.result?.matches?.length || 0} matches`);
       return { matches: result.result?.matches || [] };
     },
   };
