@@ -139,7 +139,7 @@ const analyzeTransaction = async (
   };
 
   // Store in vector database if requested
-  if (storeInVector) {
+  // if (storeInVector) {
     // Create the appropriate vector storage provider
     const vectorProvider = createVectorStorageProvider(vectorDB);
     
@@ -173,7 +173,7 @@ const analyzeTransaction = async (
     
     finalResult.vectorId = vectorId;
     finalResult.mutationId = insertResult.mutationId;
-  }
+  // }
 
   console.log('Final result with embeddings ready');
   return finalResult;
