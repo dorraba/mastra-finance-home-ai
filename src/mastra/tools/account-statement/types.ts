@@ -61,12 +61,12 @@ export const CreditCardDataSchema = z.object({
  */
 export const TransactionAnalysisSchema = z.object({
   summary: z.string()
-    .min(20, 'Summary must be at least 50 characters for meaningful content')
+    .min(50, 'Summary must be at least 50 characters for meaningful content')
     .max(200, 'Summary should be concise, maximum 200 characters')
     .describe('Clean Hebrew transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "תשלום חודשי עירית נתניה בסך 942.55 שקלים עבור מסים ותשלומי חובה"'),
     
   englishSummary: z.string()
-    .min(20, 'English summary must be at least 50 characters for meaningful content')
+    .min(50, 'English summary must be at least 50 characters for meaningful content')
     .max(200, 'English summary should be concise, maximum 200 characters')
     .describe('Clean English transaction summary for embedding: merchant name + amount + transaction type. Human readable, amount appears once, no special characters or tabs. Example: "Monthly payment to Netanya Municipality for 942.55 NIS for taxes and mandatory payments"'),
     

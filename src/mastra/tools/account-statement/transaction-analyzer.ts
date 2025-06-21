@@ -55,7 +55,9 @@ const analyzeTransaction = async (
     const schemaPrompt = generatePromptFromSchema(TransactionAnalysisSchema);
     console.log('Generated schema prompt:', schemaPrompt);
     
-    // First, generate the transaction analysis without embeddings
+    // Generate the transaction analysis with placeholder embeddings
+    const placeholderEmbedding = new Array(1536).fill(0); // Temporary placeholder
+    
     const analysisResult = await generateObject({
       model: openai(process.env.MODEL ?? "gpt-4o"),
       prompt: `
@@ -69,9 +71,13 @@ const analyzeTransaction = async (
         - Transaction amount 
         - Transaction nature
         
-        Extract and return data according to this schema (ignore embedding fields for now):
-        
-        ${schemaPrompt}
+        Extract and return data according to this schema:
+        - summary: Hebrew transaction summary (50-200 characters)
+        - englishSummary: English transaction summary (50-200 characters)  
+        - transactionType: regular/monthly/credit
+        - category: appropriate category from the list
+        - summaryEmbedding: will be filled programmatically (ignore this field)
+        - englishSummaryEmbedding: will be filled programmatically (ignore this field)
         
         CRITICAL: Both summaries MUST be at least 50 characters long and descriptive.
         
@@ -93,13 +99,11 @@ const analyzeTransaction = async (
         
         IGNORE: timestamps, existing categories, English dates, GMT references
         FOCUS: merchant name, amount, transaction nature
-        CREATE: proper Hebrew and English summaries (70-200 chars each)
+        CREATE: proper Hebrew and English summaries (50-200 chars each)
       `,
-      schema: z.object({
-        summary: z.string().min(50).max(200),
-        englishSummary: z.string().min(50).max(200),
-        transactionType: TransactionAnalysisSchema.shape.transactionType,
-        category: TransactionAnalysisSchema.shape.category
+      schema: TransactionAnalysisSchema.extend({
+        summaryEmbedding: z.array(z.number()).default(placeholderEmbedding),
+        englishSummaryEmbedding: z.array(z.number()).default(placeholderEmbedding)
       }),
     });
 
@@ -135,7 +139,7 @@ const analyzeTransaction = async (
     console.log('English embedding length:', embeddingResults.embeddings[1].length);
     console.log('First 5 values of Hebrew embedding:', embeddingResults.embeddings[0].slice(0, 5));
 
-    // Combine analysis with embeddings
+    // Replace placeholder embeddings with real ones
     const finalResult: TransactionAnalysis & { vectorId?: string; mutationId?: string } = {
       ...analysisResult.object,
       summaryEmbedding: embeddingResults.embeddings[0],
