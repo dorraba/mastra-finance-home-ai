@@ -29,16 +29,17 @@ function createVectorizeAPIClient(): VectorizeBinding | null {
       envLog(`Making INSERT request to: ${url}`);
       envLog(`Inserting ${vectors.length} vectors`);
       
-      const payload = { vectors };
-      envLog(`Request payload: ${JSON.stringify(payload, null, 2)}`);
+      // Convert vectors to NDJSON format (each vector on a separate line)
+      const ndjsonData = vectors.map(vector => JSON.stringify(vector)).join('\n');
+      envLog(`NDJSON data sample: ${ndjsonData.substring(0, 200)}...`);
       
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-ndjson',
         },
-        body: JSON.stringify(payload),
+        body: ndjsonData,
       });
       
       envLog(`INSERT Response status: ${response.status} ${response.statusText}`);
