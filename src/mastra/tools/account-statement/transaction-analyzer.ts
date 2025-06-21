@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { generateObject, embedMany } from 'ai';
-import { TransactionAnalysis, TransactionAnalysisSchema } from './types';
+import { TransactionAnalysis, TransactionAnalysisSchema, TransactionTypeSchema, TransactionCategorySchema } from './types';
 import { generatePromptFromSchema } from './schema-prompt-generator';
 import { createVectorStorageProvider } from './providers/factory';
 import { VectorRecord } from './providers/base';
@@ -32,8 +32,8 @@ export const transactionAnalyzerTool = createTool({
     englishSummary: z.string().describe('English transaction summary'),
     summaryEmbedding: z.array(z.number()).length(1536).describe('Vector embedding of Hebrew summary (1536 dimensions)'),
     englishSummaryEmbedding: z.array(z.number()).length(1536).describe('Vector embedding of English summary (1536 dimensions)'),
-    transactionType: TransactionAnalysisSchema.shape.transactionType,
-    category: TransactionAnalysisSchema.shape.category,
+    transactionType: TransactionTypeSchema,
+    category: TransactionCategorySchema,
     vectorId: z.string().optional().describe('ID of the stored vector in Vectorize database'),
     mutationId: z.string().optional().describe('Vectorize mutation ID for the storage operation'),
   }),
@@ -100,11 +100,18 @@ const analyzeTransaction = async (
       CREATE: proper Hebrew and English summaries (50-200 chars each)
     `,
     schema: z.object({
-      summary: z.string(),
-      englishSummary: z.string(),
-      transactionType: TransactionAnalysisSchema.shape.transactionType,
-      category: TransactionAnalysisSchema.shape.category
+      summary: z.string().min(50, 'Summary must be at least 50 characters').max(200, 'Summary max 200 characters'),
+      englishSummary: z.string().min(50, 'English summary must be at least 50 characters').max(200, 'English summary max 200 characters'),
+      transactionType: TransactionTypeSchema,
+      category: TransactionCategorySchema
     }),
+  }).catch(error => {
+    console.error('=== GENERATE OBJECT SCHEMA ERROR ===');
+    console.error('Input text:', cleanedText);
+    console.error('Error:', error);
+    console.error('Error message:', error?.message);
+    console.error('=====================================');
+    throw error;
   });
 
   // Use embedMany for better performance and cleaner code
@@ -118,7 +125,10 @@ const analyzeTransaction = async (
 
   // Replace placeholder embeddings with real ones
   const finalResult: TransactionAnalysis & { vectorId?: string; mutationId?: string } = {
-    ...analysisResult.object,
+    summary: analysisResult.object.summary as string,
+    englishSummary: analysisResult.object.englishSummary as string,
+    transactionType: analysisResult.object.transactionType as TransactionAnalysis['transactionType'],
+    category: analysisResult.object.category as TransactionAnalysis['category'],
     summaryEmbedding: embeddingResults.embeddings[0],
     englishSummaryEmbedding: embeddingResults.embeddings[1]
   };
@@ -141,10 +151,10 @@ const analyzeTransaction = async (
         id: vectorId,
         values: embeddingResults.embeddings[0], // Hebrew embedding
         metadata: {
-          hebrewSummary: analysisResult.object.summary,
-          englishSummary: analysisResult.object.englishSummary,
-          transactionType: analysisResult.object.transactionType,
-          category: analysisResult.object.category,
+          hebrewSummary: analysisResult.object.summary as string,
+          englishSummary: analysisResult.object.englishSummary as string,
+          transactionType: analysisResult.object.transactionType as string,
+          category: analysisResult.object.category as string,
           amount: amount,
           originalText: cleanedText,
           createdAt: new Date().toISOString(),
